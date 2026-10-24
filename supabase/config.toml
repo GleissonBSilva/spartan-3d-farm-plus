@@ -1,0 +1,13 @@
+project_id = "rleefpprszscwltsgmbv"
+
+[functions.ai-assistant]
+verify_jwt = true
+
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.invite-client]
+verify_jwt = true
+
+[functions.payment-webhook]
+verify_jwt = false

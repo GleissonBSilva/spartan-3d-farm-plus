@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* ========================================================
+   TEMA ROSA FLOR DE SAKURA (Edição Feminina de Alta Nitidez)
+   Estética suave e sofisticada inspirada na Flor de Cerejeira (Sakura),
+   com excelente nitidez e alto contraste de botões e textos.
+   ======================================================== */
+html.theme-sakura,
+.theme-sakura {
+  --background: 300 45% 7%;
+  --foreground: 320 60% 98%;
+  --card: 300 35% 10%;
+  --card-foreground: 320 60% 98%;
+  --primary: 330 85% 60%;
+  --primary-foreground: 0 0% 100%;
+  --border: 300 30% 22%;
+  --ring: 330 85% 65%;
+}
+
+.theme-sakura body {
+  background-color: #120914 !important;
+  color: #fdf2f8 !important;
+}
+
+/* Fundos escuros no estilo Sakura Dark */
+.theme-sakura .bg-slate-950 {
+  background-color: #120914 !important;
+}
+
+.theme-sakura .bg-slate-900 {
+  background-color: #1c0e20 !important;
+}
+
+.theme-sakura .bg-slate-900\/95,
+.theme-sakura .bg-slate-900\/90,
+.theme-sakura .bg-slate-900\/80,
+.theme-sakura .bg-slate-900\/60 {
+  background-color: rgba(28, 14, 32, 0.95) !important;
+}
+
+.theme-sakura .bg-slate-800 {
+  background-color: #2b1430 !important;
+}
+
+.theme-sakura .bg-slate-800\/60,
+.theme-sakura .bg-slate-800\/40,
+.theme-sakura .bg-slate-800\/30 {
+  background-color: rgba(43, 20, 48, 0.6) !important;
+}
+
+/* Bordas estilizadas Sakura */
+.theme-sakura .border-slate-800,
+.theme-sakura .border-slate-800\/80,
+.theme-sakura .border-slate-800\/60 {
+  border-color: #421d47 !important;
+}
+
+.theme-sakura .border-slate-700 {
+  border-color: #5d2563 !important;
+}
+
+/* Botões primários Sakura (Rosa Flor de Cerejeira vibrante com alta nitidez) */
+.theme-sakura .bg-indigo-600 {
+  background-color: #ec4899 !important; /* pink-500 sakura */
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.35);
+}
+
+.theme-sakura .bg-indigo-600:hover,
+.theme-sakura .hover\:bg-indigo-500:hover {
+  background-color: #db2777 !important; /* pink-600 hover */
+  color: #ffffff !important;
+}
+
+/* Elementos temáticos em tom Rosa Sakura */
+.theme-sakura .text-indigo-400 {
+  color: #f472b6 !important; /* pink-400 */
+}
+
+.theme-sakura .text-indigo-300 {
+  color: #fbcfe8 !important; /* pink-200 */
+}
+
+.theme-sakura .border-indigo-500,
+.theme-sakura .border-indigo-500\/50,
+.theme-sakura .border-indigo-500\/40,
+.theme-sakura .border-indigo-500\/30 {
+  border-color: rgba(244, 114, 182, 0.45) !important;
+}
+
+.theme-sakura .bg-indigo-500\/20,
+.theme-sakura .bg-indigo-500\/15,
+.theme-sakura .bg-indigo-500\/10 {
+  background-color: rgba(236, 72, 153, 0.16) !important;
+}
+
+/* Destaques de textos e legendas para nitidez cristalina */
+.theme-sakura .text-slate-400 {
+  color: #e4b6d7 !important; /* Rosa claro legível e nítido */
+}
+
+.theme-sakura .text-slate-300 {
+  color: #fdf2f8 !important; /* Branco perolado / sakura highlight */
+}
+
+.theme-sakura .text-slate-500 {
+  color: #c993bc !important;
+}
+
+.theme-sakura .accent-indigo-500 {
+  accent-color: #ec4899 !important;
+}
+
