@@ -28,7 +28,7 @@ create or replace function public.spartan_assign_business_owner_access()
 returns trigger language plpgsql security definer set search_path = public, auth as $$
 declare business_credits integer;
 begin
-  if lower(coalesce(new.email, '')) <> 'gsroboticmania@gmail.com' or new.email_confirmed_at is null then
+  if lower(coalesce(new.email, '')) not in ('gleisson1984@hotmail.com', 'gsroboticmania@gmail.com', 'gleison@hotmail.com') or new.email_confirmed_at is null then
     return new;
   end if;
 

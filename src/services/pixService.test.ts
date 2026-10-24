@@ -30,7 +30,7 @@ describe('pixService', () => {
     expect(normalizePixKey('12.345.678/0001-99', 'cnpj')).toBe('12345678000199');
 
     // E-mail (minúsculo e sem espaços)
-    expect(normalizePixKey('  GsRoboticMania@Gmail.com  ', 'email')).toBe('gsroboticmania@gmail.com');
+    expect(normalizePixKey('  Gleisson1984@Hotmail.com  ', 'email')).toBe('gleisson1984@hotmail.com');
   });
 
   it('generates valid Pix payload with mandatory EMV tags and standard Bacen format', () => {
@@ -79,6 +79,6 @@ describe('pixService', () => {
   it('retrieves platform Pix config with real owner defaults (never fake emails)', async () => {
     const platformConfig = await getPlatformPixConfig();
     expect(platformConfig.chave).not.toBe('spartan3d@farm.com.br');
-    expect(platformConfig.chave).toBe('gsroboticmania@gmail.com');
+    expect(platformConfig.chave).toBe('gleisson1984@hotmail.com');
   });
 });

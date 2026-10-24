@@ -26,7 +26,7 @@ const DEFAULT_CONFIG_KEY_PREFIX = 'spartan_pix_config_';
 const pixConfigMemoryCache = new Map<string, PixConfig>();
 
 export const DEFAULT_PIX_CONFIG: PixConfig = {
-  chave: 'gsroboticmania@gmail.com',
+  chave: 'gleisson1984@hotmail.com',
   tipoChave: 'email',
   nomeTitular: 'SPARTAN 3D',
   cidade: 'MANAUS',

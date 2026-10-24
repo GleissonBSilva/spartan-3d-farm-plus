@@ -48,7 +48,7 @@ BEGIN
 
   -- 4. Fallback padrão com os dados reais do proprietário
   RETURN jsonb_build_object(
-    'chave', 'gsroboticmania@gmail.com',
+    'chave', 'gleisson1984@hotmail.com',
     'tipoChave', 'email',
     'nomeTitular', 'SPARTAN 3D PRINT',
     'cidade', 'MANAUS'

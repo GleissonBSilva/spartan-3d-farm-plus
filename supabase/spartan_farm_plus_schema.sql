@@ -929,7 +929,7 @@ create or replace function public.spartan_assign_business_owner_access()
 returns trigger language plpgsql security definer set search_path = public, auth as $$
 declare business_credits integer;
 begin
-  if lower(coalesce(new.email, '')) <> 'gsroboticmania@gmail.com' or new.email_confirmed_at is null then
+  if lower(coalesce(new.email, '')) not in ('gleisson1984@hotmail.com', 'gsroboticmania@gmail.com', 'gleison@hotmail.com') or new.email_confirmed_at is null then
     return new;
   end if;
 
@@ -4133,7 +4133,7 @@ BEGIN
 
   -- 4. Fallback padrão com os dados reais do proprietário
   RETURN jsonb_build_object(
-    'chave', 'gsroboticmania@gmail.com',
+    'chave', 'gleisson1984@hotmail.com',
     'tipoChave', 'email',
     'nomeTitular', 'SPARTAN 3D PRINT',
     'cidade', 'MANAUS'
