@@ -156,7 +156,7 @@ export const ParqueImpressoras: React.FC = () => {
   const [testingPrinterId, setTestingPrinterId] = useState<string | null>(null);
   const [printerOnlineMap, setPrinterOnlineMap] = useState<Record<string, boolean>>({});
 
-  const handleTestConnection = async (printerId: string, ip: string, tipo: string = 'bambu_lab') => {
+  const handleTestConnection = async (printerId: string, ip: string, tipo: string = 'bambu_lab', code?: string) => {
     if (!ip.trim()) {
       toast.error('Informe o IP da impressora para testar a comunicação.');
       return;
@@ -164,14 +164,14 @@ export const ParqueImpressoras: React.FC = () => {
     setTestingPrinterId(printerId);
     try {
       const cleanIp = ip.replace(/^https?:\/\//, '').split(':')[0].trim();
-      const res = await fetch(`/api/printer/ping?ip=${encodeURIComponent(cleanIp)}&type=${encodeURIComponent(tipo)}`);
+      const res = await fetch(`/api/printer/ping?ip=${encodeURIComponent(cleanIp)}&type=${encodeURIComponent(tipo)}&accessCode=${encodeURIComponent(code || '')}`);
       const data = await res.json();
       if (data.success) {
         setPrinterOnlineMap(prev => ({ ...prev, [printerId]: true }));
-        toast.success(`✅ Comunicação confirmada! A impressora (${cleanIp}) está respondendo perfeitamente na rede!`);
+        toast.success(`✅ ${data.message || `A impressora (${cleanIp}) está respondendo perfeitamente na rede!`}`);
       } else {
         setPrinterOnlineMap(prev => ({ ...prev, [printerId]: false }));
-        toast.error(`❌ Não foi possível comunicar com o IP ${cleanIp}: ${data.error || 'Sem resposta'}`);
+        toast.error(`❌ ${data.error || `Não foi possível comunicar com o IP ${cleanIp}`}`);
       }
     } catch (error) {
       setPrinterOnlineMap(prev => ({ ...prev, [printerId]: false }));
@@ -837,7 +837,7 @@ export const ParqueImpressoras: React.FC = () => {
                   size="sm"
                   variant="outline"
                   disabled={testingPrinterId === printer.id}
-                  onClick={() => handleTestConnection(printer.id, printer.ipRede || '', printer.tipoConexao)}
+                  onClick={() => handleTestConnection(printer.id, printer.ipRede || '', printer.tipoConexao, printer.accessCode)}
                   className="h-6 px-2 text-[10px] font-semibold border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20"
                 >
                   <RefreshCw className={`w-3 h-3 mr-1 ${testingPrinterId === printer.id ? 'animate-spin' : ''}`} />
@@ -848,86 +848,110 @@ export const ParqueImpressoras: React.FC = () => {
           )}
 
           {/* PAINEL DE TELEMETRIA AO VIVO (MQTT) */}
-          {telemetryMap[printer.id] && (
+          {printer.tipoConexao === 'bambu_lab' && (
             <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3 text-xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Telemetria ao Vivo (Bambu Lab)
+                  <span className={`h-2 w-2 rounded-full ${telemetryMap[printer.id] ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  Telemetria ao Vivo (Bambu Lab)
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  Estado: <strong className="text-white uppercase">{telemetryMap[printer.id].gcodeState}</strong>
+                  Estado: <strong className="text-white uppercase">{telemetryMap[printer.id]?.gcodeState || 'AGUARDANDO SINAL'}</strong>
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                {/* Temperatura do Bico */}
-                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
-                  <div className="p-1.5 rounded-md bg-rose-500/10 text-rose-400">
-                    <Thermometer className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Bico (Hotend)</span>
-                    <strong className="text-white text-xs">
-                      {telemetryMap[printer.id].nozzleTemp !== null ? `${telemetryMap[printer.id].nozzleTemp}°C` : '--'}
-                    </strong>
-                    {telemetryMap[printer.id].nozzleTargetTemp ? (
-                      <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].nozzleTargetTemp}°</span>
-                    ) : null}
-                  </div>
-                </div>
+              {telemetryMap[printer.id] ? (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    {/* Temperatura do Bico */}
+                    <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                      <div className="p-1.5 rounded-md bg-rose-500/10 text-rose-400">
+                        <Thermometer className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Bico (Hotend)</span>
+                        <strong className="text-white text-xs">
+                          {telemetryMap[printer.id].nozzleTemp !== null ? `${telemetryMap[printer.id].nozzleTemp}°C` : '--'}
+                        </strong>
+                        {telemetryMap[printer.id].nozzleTargetTemp ? (
+                          <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].nozzleTargetTemp}°</span>
+                        ) : null}
+                      </div>
+                    </div>
 
-                {/* Temperatura da Mesa */}
-                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
-                  <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-400">
-                    <Thermometer className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Mesa (Bed)</span>
-                    <strong className="text-white text-xs">
-                      {telemetryMap[printer.id].bedTemp !== null ? `${telemetryMap[printer.id].bedTemp}°C` : '--'}
-                    </strong>
-                    {telemetryMap[printer.id].bedTargetTemp ? (
-                      <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].bedTargetTemp}°</span>
-                    ) : null}
-                  </div>
-                </div>
+                    {/* Temperatura da Mesa */}
+                    <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                      <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-400">
+                        <Thermometer className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Mesa (Bed)</span>
+                        <strong className="text-white text-xs">
+                          {telemetryMap[printer.id].bedTemp !== null ? `${telemetryMap[printer.id].bedTemp}°C` : '--'}
+                        </strong>
+                        {telemetryMap[printer.id].bedTargetTemp ? (
+                          <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].bedTargetTemp}°</span>
+                        ) : null}
+                      </div>
+                    </div>
 
-                {/* Camada Atual */}
-                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
-                  <div className="p-1.5 rounded-md bg-sky-500/10 text-sky-400">
-                    <Layers className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Camadas</span>
-                    <strong className="text-white text-xs">
-                      {telemetryMap[printer.id].layerNum !== null ? telemetryMap[printer.id].layerNum : '--'}
-                    </strong>
-                    {telemetryMap[printer.id].totalLayerNum ? (
-                      <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].totalLayerNum}</span>
-                    ) : null}
-                  </div>
-                </div>
+                    {/* Camada Atual */}
+                    <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                      <div className="p-1.5 rounded-md bg-sky-500/10 text-sky-400">
+                        <Layers className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Camadas</span>
+                        <strong className="text-white text-xs">
+                          {telemetryMap[printer.id].layerNum !== null ? telemetryMap[printer.id].layerNum : '--'}
+                        </strong>
+                        {telemetryMap[printer.id].totalLayerNum ? (
+                          <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].totalLayerNum}</span>
+                        ) : null}
+                      </div>
+                    </div>
 
-                {/* Tempo Restante Real */}
-                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
-                  <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
-                    <Clock3 className="w-4 h-4" />
+                    {/* Tempo Restante Real */}
+                    <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                      <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
+                        <Clock3 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Tempo Restante</span>
+                        <strong className="text-white text-xs">
+                          {telemetryMap[printer.id].remainingTimeMinutes !== null
+                            ? `${telemetryMap[printer.id].remainingTimeMinutes} min`
+                            : '--'}
+                        </strong>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Tempo Restante</span>
-                    <strong className="text-white text-xs">
-                      {telemetryMap[printer.id].remainingTimeMinutes !== null
-                        ? `${telemetryMap[printer.id].remainingTimeMinutes} min`
-                        : '--'}
-                    </strong>
-                  </div>
-                </div>
-              </div>
 
-              {telemetryMap[printer.id].subtaskName && (
-                <div className="text-[11px] text-slate-400 truncate pt-1 flex items-center gap-1.5">
-                  <span className="text-slate-500">Arquivo Bambu Studio:</span>
-                  <span className="font-mono text-white text-xs">{telemetryMap[printer.id].subtaskName}</span>
+                  {telemetryMap[printer.id].subtaskName && (
+                    <div className="text-[11px] text-slate-400 truncate pt-1 flex items-center gap-1.5">
+                      <span className="text-slate-500">Arquivo Bambu Studio:</span>
+                      <span className="font-mono text-white text-xs">{telemetryMap[printer.id].subtaskName}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                  <div className="text-slate-300 text-xs">
+                    <p className="font-semibold text-amber-300 flex items-center gap-1.5">
+                      <span>⚠️</span> Aguardando Código de Acesso LAN da Bambu Lab
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      IP: <code className="text-indigo-300 bg-indigo-950/50 px-1.5 py-0.5 rounded">{printer.ipRede || '192.168.0.102'}</code> · Para liberar temperaturas em tempo real e tempo restante, digite o código de 8 dígitos exibido na tela da impressora.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleOpenEdit(printer)}
+                    className="h-8 text-xs bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 rounded-lg shadow"
+                  >
+                    🔑 Inserir Código de Acesso
+                  </Button>
                 </div>
               )}
             </div>

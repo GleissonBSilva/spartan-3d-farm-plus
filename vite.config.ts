@@ -23,9 +23,56 @@ export default defineConfig(() => ({
           const url = new URL(req.url || "", `http://${req.headers.host}`);
           const ip = url.searchParams.get("ip") || "192.168.0.102";
           const type = url.searchParams.get("type") || "bambu_lab";
+          const accessCode = url.searchParams.get("accessCode") || "";
           const port = parseInt(url.searchParams.get("port") || (type === "bambu_lab" ? "8883" : "80"), 10);
 
           res.setHeader("Content-Type", "application/json");
+
+          if (type === "bambu_lab" && accessCode) {
+            import("mqtt").then(({ default: mqtt }) => {
+              const client = mqtt.connect(`mqtts://${ip}:8883`, {
+                username: "bblp",
+                password: accessCode,
+                rejectUnauthorized: false,
+                connectTimeout: 3500,
+                reconnectPeriod: 0,
+              });
+              let handled = false;
+              const timeout = setTimeout(() => {
+                if (!handled) {
+                  handled = true;
+                  try { client.end(true); } catch {}
+                  res.end(JSON.stringify({ success: false, ip, port: 8883, error: "Tempo esgotado ao autenticar com a Bambu Lab" }));
+                }
+              }, 4000);
+              client.on("connect", () => {
+                if (!handled) {
+                  handled = true;
+                  clearTimeout(timeout);
+                  try { client.end(true); } catch {}
+                  res.end(JSON.stringify({ success: true, authenticated: true, ip, port: 8883, type: "bambu_lab", message: "Bambu Lab conectada e AUTENTICADA com sucesso!" }));
+                }
+              });
+              client.on("error", (err) => {
+                if (!handled) {
+                  handled = true;
+                  clearTimeout(timeout);
+                  try { client.end(true); } catch {}
+                  const isAuthError = err.message && (err.message.includes("Not authorized") || err.message.includes("Connection refused"));
+                  res.end(JSON.stringify({
+                    success: false,
+                    authenticated: false,
+                    ip,
+                    port: 8883,
+                    error: isAuthError ? "Código de Acesso incorreto ou recusado pela impressora (veja os 8 dígitos no visor da máquina em Modo LAN)" : err.message
+                  }));
+                }
+              });
+            }).catch(err => {
+              res.end(JSON.stringify({ success: false, ip, port: 8883, error: err.message }));
+            });
+            return;
+          }
 
           if (type === "bambu_lab" || port === 8883) {
             const socket = tls.connect(port, ip, { rejectUnauthorized: false, timeout: 3500 }, () => {
