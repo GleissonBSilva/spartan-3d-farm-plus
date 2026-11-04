@@ -152,6 +152,7 @@ export const ParqueImpressoras: React.FC = () => {
   const [editSerialNumber, setEditSerialNumber] = useState('');
   const [editAccessCode, setEditAccessCode] = useState('');
   const [editShowAccessCode, setEditShowAccessCode] = useState(false);
+  const [editTab, setEditTab] = useState<'geral' | 'rede'>('geral');
 
   const [testingPrinterId, setTestingPrinterId] = useState<string | null>(null);
   const [printerOnlineMap, setPrinterOnlineMap] = useState<Record<string, boolean>>({});
@@ -472,8 +473,9 @@ export const ParqueImpressoras: React.FC = () => {
     }
   };
 
-  const handleOpenEdit = (printer: Impressora3D) => {
+  const handleOpenEdit = (printer: Impressora3D, initialTab: 'geral' | 'rede' = 'geral') => {
     setEditingPrinterId(printer.id);
+    setEditTab(initialTab);
     setEditNome(printer.nome || '');
     setEditModelo(printer.modelo || '');
     setEditPotencia(printer.potenciaWatts || 350);
@@ -1042,7 +1044,7 @@ export const ParqueImpressoras: React.FC = () => {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => handleOpenEdit(printer)}
+                    onClick={() => handleOpenEdit(printer, 'rede')}
                     className="h-8 text-xs bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 rounded-lg shadow"
                   >
                     🔑 Inserir Código de Acesso
@@ -1171,126 +1173,207 @@ export const ParqueImpressoras: React.FC = () => {
       })}
     </section>
 
-    {/* MODAL DE EDIÇÃO DA IMPRESSORA */}
+    {/* MODAL DE EDIÇÃO DA IMPRESSORA (COMPACTO COM ABAS E ALTURA MÁXIMA CONTROLADA) */}
     {editingPrinterId && (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 sm:p-6" onClick={() => setEditingPrinterId(null)}>
-        <div className="w-full max-w-lg space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-5 sm:p-6" onClick={e => e.stopPropagation()}>
-          <div className="flex items-start justify-between">
-            <h3 className="font-bold text-white">Editar Impressora & Custos</h3>
-            <Button type="button" variant="ghost" size="icon" onClick={() => setEditingPrinterId(null)}><X className="h-4 w-4" /></Button>
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-sm" onClick={() => setEditingPrinterId(null)}>
+        <div
+          className="w-full max-w-md max-h-[88vh] flex flex-col rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header fixo */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/90 shrink-0">
+            <div>
+              <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <span>🖨️</span> Configurar Impressora
+              </h3>
+              <p className="text-[11px] text-slate-400">Ajuste os parâmetros operacionais ou dados de rede</p>
+            </div>
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-white" onClick={() => setEditingPrinterId(null)}>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Nome"><Input value={editNome} onChange={e => setEditNome(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-            <Field label="Modelo"><Input value={editModelo} onChange={e => setEditModelo(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-            <Field label="Potência (W)"><Input type="number" value={editPotencia} onChange={e => setEditPotencia(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-            <Field label="Bico (mm)"><Input type="number" step="0.1" value={editBico} onChange={e => setEditBico(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-            <Field label="Preço Investimento (R$)"><Input type="number" step="0.01" value={editPrecoCompra} onChange={e => setEditPrecoCompra(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-            <Field label="Vida útil (Horas)"><Input type="number" step="100" value={editVidaUtil} onChange={e => setEditVidaUtil(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-            <Field label="Manutenção a cada (h)"><Input type="number" min="1" step="1" value={editIntervaloManutencao} onChange={e => setEditIntervaloManutencao(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-            <Field label="Horas de impressão acumuladas"><Input type="number" min="0" step="0.5" value={editHorasUso} onChange={e => setEditHorasUso(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
-          </div>
-
-          {/* CONFIGURAÇÃO DE COMUNICAÇÃO INDIVIDUAL */}
-          <div className="rounded-xl border border-indigo-500/30 bg-slate-950/70 p-3.5 space-y-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-              <Wifi className="w-3.5 h-3.5" /> Comunicação & Fatiador desta Impressora
-            </span>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Tipo de Conexão">
-                <select
-                  value={editTipoConexao}
-                  onChange={e => setEditTipoConexao(e.target.value as Impressora3D['tipoConexao'])}
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="manual">Manual (Sem conexão de rede)</option>
-                  <option value="bambu_lab">Bambu Lab (Modo LAN / Bambu Studio)</option>
-                  <option value="klipper">Klipper / Moonraker</option>
-                  <option value="octoprint">OctoPrint</option>
-                </select>
-              </Field>
-
+          {/* Abas Superiores para Reduzir Altura Vertical */}
+          <div className="flex border-b border-slate-800 bg-slate-950/70 px-4 pt-2 gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setEditTab('rede')}
+              className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                editTab === 'rede'
+                  ? 'border-indigo-500 text-indigo-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              Rede & Bambu Studio
               {editTipoConexao === 'bambu_lab' && (
-                <>
-                  <Field label="IP Local da Impressora">
-                    <Input
-                      placeholder="Ex.: 192.168.0.102"
-                      value={editIpRede}
-                      onChange={e => setEditIpRede(e.target.value)}
-                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
-                    />
-                  </Field>
-                  <Field label="Nº de Série (Serial)">
-                    <Input
-                      placeholder="Ex.: 03919D520905950"
-                      value={editSerialNumber}
-                      onChange={e => setEditSerialNumber(e.target.value)}
-                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
-                    />
-                  </Field>
-                  <Field label="Código de Acesso LAN">
-                    <div className="relative">
-                      <Input
-                        type={editShowAccessCode ? "text" : "password"}
-                        placeholder="Ex.: 8 dígitos"
-                        value={editAccessCode}
-                        onChange={e => setEditAccessCode(e.target.value)}
-                        className="border-slate-700 bg-slate-900 text-white font-mono text-xs pr-9"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setEditShowAccessCode(prev => !prev)}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
-                        tabIndex={-1}
-                      >
-                        {editShowAccessCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </Field>
-                </>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditTab('geral')}
+              className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                editTab === 'geral'
+                  ? 'border-indigo-500 text-indigo-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              Especificações & ROI
+            </button>
+          </div>
 
-              {editTipoConexao === 'klipper' && (
-                <div className="sm:col-span-2">
+          {/* Conteúdo com Scroll Controlado */}
+          <div className="p-4 overflow-y-auto space-y-3 flex-1">
+            {editTab === 'rede' ? (
+              <div className="space-y-3">
+                <Field label="Tipo de Conexão">
+                  <select
+                    value={editTipoConexao}
+                    onChange={e => setEditTipoConexao(e.target.value as Impressora3D['tipoConexao'])}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="manual">Manual (Sem conexão de rede)</option>
+                    <option value="bambu_lab">Bambu Lab (Modo LAN / Bambu Studio)</option>
+                    <option value="klipper">Klipper / Moonraker</option>
+                    <option value="octoprint">OctoPrint</option>
+                  </select>
+                </Field>
+
+                {editTipoConexao === 'bambu_lab' && (
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-3 space-y-2.5">
+                    <Field label="IP Local da Impressora na Rede">
+                      <Input
+                        placeholder="Ex.: 192.168.0.102"
+                        value={editIpRede}
+                        onChange={e => setEditIpRede(e.target.value)}
+                        className="h-8 border-slate-700 bg-slate-950 text-white font-mono text-xs"
+                      />
+                    </Field>
+                    <Field label="Nº de Série da Impressora (Serial)">
+                      <Input
+                        placeholder="Ex.: 03919D520905950"
+                        value={editSerialNumber}
+                        onChange={e => setEditSerialNumber(e.target.value)}
+                        className="h-8 border-slate-700 bg-slate-950 text-white font-mono text-xs"
+                      />
+                    </Field>
+                    <Field label="Código de Acesso LAN (Access Code)">
+                      <div className="relative">
+                        <Input
+                          type={editShowAccessCode ? "text" : "password"}
+                          placeholder="Ex.: 28161068"
+                          value={editAccessCode}
+                          onChange={e => setEditAccessCode(e.target.value)}
+                          className="h-8 border-slate-700 bg-slate-950 text-white font-mono text-xs pr-9"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditShowAccessCode(prev => !prev)}
+                          className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                          tabIndex={-1}
+                        >
+                          {editShowAccessCode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </Field>
+
+                    {editIpRede && (
+                      <div className="pt-1 flex items-center justify-between">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={testingPrinterId === editingPrinterId}
+                          onClick={() => handleTestConnection(editingPrinterId, editIpRede, editTipoConexao, editAccessCode)}
+                          className="h-7 text-[11px] border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20"
+                        >
+                          <RefreshCw className={`w-3 h-3 mr-1 ${testingPrinterId === editingPrinterId ? 'animate-spin' : ''}`} />
+                          {testingPrinterId === editingPrinterId ? 'Verificando sinal...' : 'Testar Comunicação'}
+                        </Button>
+                        <span className="text-[10px] text-slate-400">Porta 8883 MQTT</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {editTipoConexao === 'klipper' && (
                   <Field label="URL do Moonraker / Klipper">
                     <Input
                       placeholder="Ex.: http://192.168.0.105:7125"
                       value={editIpRede}
                       onChange={e => setEditIpRede(e.target.value)}
-                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                      className="h-8 border-slate-700 bg-slate-950 text-white font-mono text-xs"
                     />
                   </Field>
-                </div>
-              )}
+                )}
 
-              {editTipoConexao === 'octoprint' && (
-                <>
-                  <Field label="URL do OctoPrint">
-                    <Input
-                      placeholder="Ex.: http://192.168.0.105:5000"
-                      value={editIpRede}
-                      onChange={e => setEditIpRede(e.target.value)}
-                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
-                    />
-                  </Field>
-                  <Field label="API Key">
-                    <Input
-                      type="password"
-                      placeholder="API Key do OctoPrint"
-                      value={editAccessCode}
-                      onChange={e => setEditAccessCode(e.target.value)}
-                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
-                    />
-                  </Field>
-                </>
-              )}
-            </div>
+                {editTipoConexao === 'octoprint' && (
+                  <div className="space-y-2.5">
+                    <Field label="URL do OctoPrint">
+                      <Input
+                        placeholder="Ex.: http://192.168.0.105:5000"
+                        value={editIpRede}
+                        onChange={e => setEditIpRede(e.target.value)}
+                        className="h-8 border-slate-700 bg-slate-950 text-white font-mono text-xs"
+                      />
+                    </Field>
+                    <Field label="API Key">
+                      <Input
+                        type="password"
+                        placeholder="API Key do OctoPrint"
+                        value={editAccessCode}
+                        onChange={e => setEditAccessCode(e.target.value)}
+                        className="h-8 border-slate-700 bg-slate-950 text-white font-mono text-xs"
+                      />
+                    </Field>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-2.5 sm:grid-cols-2 text-xs">
+                <Field label="Nome da impressora">
+                  <Input value={editNome} onChange={e => setEditNome(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+                <Field label="Fabricante / Modelo">
+                  <Input value={editModelo} onChange={e => setEditModelo(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+                <Field label="Potência (W)">
+                  <Input type="number" value={editPotencia} onChange={e => setEditPotencia(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+                <Field label="Bico (mm)">
+                  <Input type="number" step="0.1" value={editBico} onChange={e => setEditBico(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+                <Field label="Preço Compra (R$)">
+                  <Input type="number" step="0.01" value={editPrecoCompra} onChange={e => setEditPrecoCompra(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+                <Field label="Vida útil (Horas)">
+                  <Input type="number" step="100" value={editVidaUtil} onChange={e => setEditVidaUtil(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+                <Field label="Manutenção a cada (h)">
+                  <Input type="number" min="1" step="1" value={editIntervaloManutencao} onChange={e => setEditIntervaloManutencao(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+                <Field label="Horas acumuladas">
+                  <Input type="number" min="0" step="0.5" value={editHorasUso} onChange={e => setEditHorasUso(e.target.value)} className="h-8 bg-slate-950 text-white border-slate-700 text-xs" />
+                </Field>
+              </div>
+            )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setEditingPrinterId(null)} className="border-slate-700 bg-slate-950 text-slate-200">Cancelar</Button>
-            <Button type="button" onClick={handleUpdate} className="bg-indigo-600 text-white hover:bg-indigo-500">Salvar Alterações</Button>
+          {/* Footer fixo */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-800 bg-slate-900/90 shrink-0">
+            <span className="text-[10px] text-slate-500">
+              {editTab === 'rede' ? 'Configuração de comunicação' : 'Cálculo de depreciação horária'}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => setEditingPrinterId(null)} className="h-7 text-xs border-slate-700 bg-slate-950 text-slate-300">
+                Cancelar
+              </Button>
+              <Button type="button" size="sm" onClick={handleUpdate} className="h-7 text-xs bg-indigo-600 text-white hover:bg-indigo-500">
+                Salvar Alterações
+              </Button>
+            </div>
           </div>
         </div>
       </div>
