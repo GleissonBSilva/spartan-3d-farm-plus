@@ -47,7 +47,22 @@ import { useAuth } from '@/context/AuthContext';
 
 export const ParqueImpressoras: React.FC = () => {
   const { user } = useAuth();
-  const { impressoras: rawImpressoras, projetos, historicoImpressoras, addImpressora, updateImpressora, deleteImpressora, updateImpressoraStatus, updatePrinterProgress, recordMaintenance, updateProjetoStatus, refreshFarmData } = useSaaSData();
+  const {
+    impressoras: rawImpressoras,
+    projetos,
+    filamentos,
+    consumirFilamento,
+    consumirMultiplosFilamentos,
+    historicoImpressoras,
+    addImpressora,
+    updateImpressora,
+    deleteImpressora,
+    updateImpressoraStatus,
+    updatePrinterProgress,
+    recordMaintenance,
+    updateProjetoStatus,
+    refreshFarmData,
+  } = useSaaSData();
   
   // Estado local para exclusão manual garantida e metadados customizados (estritamente isolados por user.id)
   const [deletedPrinterIds, setDeletedPrinterIds] = useState<string[]>([]);
@@ -208,7 +223,7 @@ export const ParqueImpressoras: React.FC = () => {
     }
   };
 
-  const handleConcluirTrabalho = async (printer: Impressora3D, isAuto = false) => {
+  const handleConcluirTrabalho = async (printer: Impressora3D, isAuto = false, telemetryPayload?: PrinterTelemetry) => {
     if (completingPrintersRef.current.has(printer.id)) return;
     completingPrintersRef.current.add(printer.id);
 
@@ -216,7 +231,7 @@ export const ParqueImpressoras: React.FC = () => {
       ? printer.projetoAtualId
       : projetos.find(proj => (proj.impressoraId === printer.id || !proj.impressoraId) && proj.status === 'em_impressao')?.id;
     const currentProject = projetos.find(proj => proj.id === rawProjectId);
-    const projectName = currentProject?.nomePeca || printer.projetoAtual || 'Projeto';
+    const projectName = currentProject?.nomePeca || printer.projetoAtual || telemetryPayload?.subtaskName || 'Impressão 3D';
 
     try {
       // 1. Zera e limpa do mapa de contagem local e do localStorage
@@ -236,7 +251,45 @@ export const ParqueImpressoras: React.FC = () => {
         writeStoredTimers(stored);
       }
 
-      // 2. Dá baixa no projeto e libera a impressora
+      // 2. BAIXA AUTOMÁTICA NO CONSUMO DE ESTOQUE
+      let stockDeductedGrams = 0;
+      let stockFilamentLabel = '';
+
+      if (currentProject?.materials && currentProject.materials.length > 0) {
+        // Se o projeto possui lista de materiais definidos
+        consumirMultiplosFilamentos(currentProject.materials);
+        stockDeductedGrams = currentProject.materials.reduce((acc, m) => acc + (m.weightGrams || 0), 0);
+        stockFilamentLabel = currentProject.materials.map(m => `${m.filamentType} ${m.color || ''}`).join(', ');
+      } else if (currentProject && currentProject.pesoEstimadoG > 0) {
+        // Projeto com peso estimado sem materials detalhados
+        const targetSpool = filamentos.find(f => f.tipo.toUpperCase() === 'PLA') || filamentos[0];
+        if (targetSpool) {
+          consumirFilamento(targetSpool.id, currentProject.pesoEstimadoG);
+          stockDeductedGrams = currentProject.pesoEstimadoG;
+          stockFilamentLabel = `${targetSpool.tipo} ${targetSpool.cor}`;
+        }
+      } else {
+        // Impressão direta do Bambu Studio (via AMS Lite ou carretel avulso)
+        const activeTrayId = telemetryPayload?.activeTray;
+        const activeTray = telemetryPayload?.ams?.[0]?.trays?.find(t => String(t.id) === String(activeTrayId));
+        
+        const matchingSpool = activeTray
+          ? filamentos.find(f => 
+              f.tipo.toUpperCase() === (activeTray.type || 'PLA').toUpperCase() && 
+              (activeTray.color ? f.corHex?.toLowerCase() === activeTray.color.toLowerCase() : true)
+            ) || filamentos.find(f => f.tipo.toUpperCase() === (activeTray.type || 'PLA').toUpperCase())
+          : filamentos[0];
+
+        if (matchingSpool) {
+          // Consumo padrão de 50g para peças concluídas diretamente do fatiador
+          const autoWeight = 50; 
+          consumirFilamento(matchingSpool.id, autoWeight);
+          stockDeductedGrams = autoWeight;
+          stockFilamentLabel = `${matchingSpool.tipo} ${matchingSpool.cor}`;
+        }
+      }
+
+      // 3. Dá baixa no projeto e libera a impressora para 'disponivel'
       if (rawProjectId) {
         await updateProjetoStatus(rawProjectId, 'concluido');
       } else {
@@ -245,20 +298,24 @@ export const ParqueImpressoras: React.FC = () => {
 
       await refreshFarmData();
 
+      const stockNotice = stockDeductedGrams > 0 
+        ? ` · 📦 Baixa no estoque: -${stockDeductedGrams}g (${stockFilamentLabel})` 
+        : '';
+
       if (isAuto) {
         toast.success(
-          `⏰ Tempo zerado! A peça "${projectName}" foi finalizada, com baixa automática efetuada. A impressora ${printer.nome} agora está disponível!`,
+          `⏰ Impressão concluída! A peça "${projectName}" foi finalizada na impressora ${printer.nome}.${stockNotice}`,
           { duration: 6000 }
         );
       } else {
         toast.success(
-          `✅ Impressão de "${projectName}" concluída com sucesso! Impressora ${printer.nome} liberada e pronta para nova produção.`,
+          `✅ Impressão de "${projectName}" concluída com sucesso! Impressora ${printer.nome} liberada.${stockNotice}`,
           { duration: 5000 }
         );
       }
     } catch (e) {
       console.error('Erro ao concluir trabalho da impressora:', e);
-      toast.error('Erro ao registrar a conclusão da impressão.');
+      toast.error('Erro ao registrar a conclusão da impressão e baixa de estoque.');
     } finally {
       setTimeout(() => {
         completingPrintersRef.current.delete(printer.id);
@@ -320,7 +377,13 @@ export const ParqueImpressoras: React.FC = () => {
             accessCode: printer.accessCode,
           });
           const res = await fetch(`/api/printer/telemetry?${params.toString()}`);
-          if (!res.ok) continue;
+          if (!res.ok) {
+            setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: false }));
+            if (printer.status !== 'desconectada' && printer.status !== 'manutencao') {
+              updateImpressoraStatus(printer.id, 'desconectada');
+            }
+            continue;
+          }
           const data = await res.json();
           if (data.success && data.data && mounted) {
             const telemetry: PrinterTelemetry = {
@@ -335,13 +398,36 @@ export const ParqueImpressoras: React.FC = () => {
               setProgressDraft(prev => ({ ...prev, [printer.id]: telemetry.progressPercent! }));
             }
 
-            // BAIXA AUTOMÁTICA NO ESTOQUE: Se a impressora finalizou (FINISH) e tinha projeto alocado
-            if (telemetry.gcodeState === 'FINISH' && printer.projetoAtualId && printer.status === 'imprimindo') {
-              void handleConcluirTrabalho(printer, true);
+            // ATUALIZAÇÃO DO STATUS DA IMPRESSORA CONFORME A CONEXÃO E O ESTADO REAL (GCODE_STATE):
+            const gState = (telemetry.gcodeState || '').toUpperCase();
+
+            if (gState === 'RUNNING' || gState === 'PREPARE') {
+              if (printer.status !== 'imprimindo' && printer.status !== 'manutencao') {
+                updateImpressoraStatus(printer.id, 'imprimindo');
+              }
+            } else if (gState === 'PAUSE') {
+              if (printer.status !== 'pausada' && printer.status !== 'manutencao') {
+                updateImpressoraStatus(printer.id, 'pausada');
+              }
+            } else if (gState === 'FINISH') {
+              // Finalizou: conclui trabalho, baixa o estoque e libera a máquina para 'disponivel'
+              void handleConcluirTrabalho(printer, true, telemetry);
+            } else if (gState === 'IDLE' || gState === 'FAILED') {
+              if (printer.status === 'desconectada') {
+                updateImpressoraStatus(printer.id, 'disponivel');
+              }
+            }
+          } else if (!data.success && mounted) {
+            setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: false }));
+            if (printer.status !== 'desconectada' && printer.status !== 'manutencao') {
+              updateImpressoraStatus(printer.id, 'desconectada');
             }
           }
         } catch {
-          // ignora falhas transitórias de rede
+          setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: false }));
+          if (printer.status !== 'desconectada' && printer.status !== 'manutencao') {
+            updateImpressoraStatus(printer.id, 'desconectada');
+          }
         }
       }
     };
@@ -1070,7 +1156,7 @@ export const ParqueImpressoras: React.FC = () => {
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => handleConcluirTrabalho(printer, false)}
+                    onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])}
                     title="Zerar tempo e concluir projeto agora"
                     className="h-7 px-2.5 text-[11px] font-semibold border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-white rounded-lg transition-colors"
                   >
@@ -1112,7 +1198,7 @@ export const ParqueImpressoras: React.FC = () => {
                   onPointerUp={event => {
                     const value = Number(event.currentTarget.value);
                     if (value >= 100) {
-                      void handleConcluirTrabalho(printer, false);
+                      void handleConcluirTrabalho(printer, false, telemetryMap[printer.id]);
                     } else {
                       void updatePrinterProgress(printer.id, Math.round(value));
                     }
@@ -1120,7 +1206,7 @@ export const ParqueImpressoras: React.FC = () => {
                   onKeyUp={event => {
                     const value = Number(event.currentTarget.value);
                     if (value >= 100) {
-                      void handleConcluirTrabalho(printer, false);
+                      void handleConcluirTrabalho(printer, false, telemetryMap[printer.id]);
                     } else {
                       void updatePrinterProgress(printer.id, Math.round(value));
                     }
@@ -1143,7 +1229,7 @@ export const ParqueImpressoras: React.FC = () => {
                 <Button size="sm" variant="outline" onClick={() => updateImpressoraStatus(printer.id, 'pausada')} className="border-slate-700 bg-slate-950 text-xs text-white hover:bg-slate-800">
                   <Pause className="mr-1.5 h-3.5 w-3.5" />Pausar
                 </Button>
-                <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false)} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold shadow-md shadow-emerald-600/20">
+                <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold shadow-md shadow-emerald-600/20">
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Concluir & Liberar Máquina
                 </Button>
               </>
@@ -1153,7 +1239,7 @@ export const ParqueImpressoras: React.FC = () => {
                 <Button size="sm" onClick={() => updateImpressoraStatus(printer.id, 'imprimindo')} className="bg-sky-600 text-xs text-white hover:bg-sky-500">
                   <Play className="mr-1.5 h-3.5 w-3.5" />Retomar
                 </Button>
-                <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false)} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold">
+                <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold">
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Concluir & Liberar Máquina
                 </Button>
               </>
