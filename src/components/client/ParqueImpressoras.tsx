@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw, Thermometer, Fan, Layers } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw, Thermometer, Fan, Layers, Disc } from 'lucide-react';
 import { useSaaSData } from '@/context/SaaSDataContext';
 import { Impressora3D } from '@/types/saas';
 import { toast } from 'sonner';
@@ -265,6 +265,23 @@ export const ParqueImpressoras: React.FC = () => {
     }
   };
 
+  interface AmsTray {
+    id: string;
+    color: string;
+    type: string;
+    subBrand: string;
+    remain: number;
+    active: boolean;
+    loaded: boolean;
+  }
+
+  interface AmsUnit {
+    id: string;
+    humidity?: string;
+    temp?: string;
+    trays: AmsTray[];
+  }
+
   interface PrinterTelemetry {
     gcodeState: string;
     nozzleTemp: number | null;
@@ -277,6 +294,8 @@ export const ParqueImpressoras: React.FC = () => {
     layerNum: number | null;
     totalLayerNum: number | null;
     fanSpeed?: number | null;
+    ams?: AmsUnit[];
+    activeTray?: string | null;
     lastUpdated: number;
   }
 
@@ -931,6 +950,82 @@ export const ParqueImpressoras: React.FC = () => {
                     <div className="text-[11px] text-slate-400 truncate pt-1 flex items-center gap-1.5">
                       <span className="text-slate-500">Arquivo Bambu Studio:</span>
                       <span className="font-mono text-white text-xs">{telemetryMap[printer.id].subtaskName}</span>
+                    </div>
+                  )}
+
+                  {/* Visualizador de AMS / AMS Lite (Carrossel de Filamentos) */}
+                  {telemetryMap[printer.id].ams && telemetryMap[printer.id].ams!.length > 0 && (
+                    <div className="pt-2 border-t border-indigo-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                          <Disc className="w-3.5 h-3.5 text-indigo-400" />
+                          Sistema AMS ({telemetryMap[printer.id].ams!.length > 1 ? `${telemetryMap[printer.id].ams!.length} Unidades` : 'AMS Lite / 4 Slots'})
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Carretel Ativo:{' '}
+                          <strong className="text-white">
+                            {telemetryMap[printer.id].activeTray !== null && telemetryMap[printer.id].activeTray !== undefined
+                              ? `Slot ${Number(telemetryMap[printer.id].activeTray) + 1}`
+                              : 'Nenhum'}
+                          </strong>
+                        </span>
+                      </div>
+
+                      {telemetryMap[printer.id].ams!.map((unit, unitIdx) => (
+                        <div key={unit.id || unitIdx} className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {unit.trays.map((tray, trayIdx) => {
+                            const isCurrent = tray.active || String(telemetryMap[printer.id].activeTray) === String(tray.id);
+                            return (
+                              <div
+                                key={tray.id || trayIdx}
+                                className={`relative rounded-lg p-2 border transition-all flex flex-col justify-between ${
+                                  isCurrent
+                                    ? 'bg-indigo-950/70 border-indigo-400/90 shadow-[0_0_12px_rgba(99,102,241,0.3)]'
+                                    : 'bg-slate-950/80 border-slate-800/80'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-1 mb-1.5">
+                                  <span className="text-[10px] font-mono font-bold text-slate-400">
+                                    SLOT {Number(tray.id) + 1}
+                                  </span>
+                                  {isCurrent && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                      NO BICO
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 my-1">
+                                  <span
+                                    className="w-5 h-5 rounded-full border-2 border-white/40 shadow shrink-0"
+                                    style={{ backgroundColor: tray.color || '#FFFFFF' }}
+                                    title={`Cor: ${tray.color}`}
+                                  />
+                                  <div className="min-w-0">
+                                    <strong className="text-xs text-white block truncate leading-tight">
+                                      {tray.type || 'Vazio'}
+                                    </strong>
+                                    <span className="text-[10px] text-slate-400 block truncate">
+                                      {tray.remain !== undefined ? `${tray.remain}% rest.` : 'Pronto'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Barra indicadora da cor e do filamento restante */}
+                                <div className="w-full bg-slate-800 rounded-full h-1.5 mt-1 overflow-hidden">
+                                  <div
+                                    className="h-1.5 rounded-full transition-all"
+                                    style={{
+                                      width: `${tray.remain ?? 100}%`,
+                                      backgroundColor: tray.color || '#6366f1',
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </>

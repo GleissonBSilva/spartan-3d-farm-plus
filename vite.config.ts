@@ -165,6 +165,25 @@ export default defineConfig(() => ({
                         layerNum: print.layer_num !== undefined ? Number(print.layer_num) : null,
                         totalLayerNum: print.total_layer_num !== undefined ? Number(print.total_layer_num) : null,
                         fanSpeed: print.cooling_fan_speed || null,
+                        ams: (print.ams?.ams || []).map((unit: any) => ({
+                          id: String(unit.id),
+                          humidity: unit.humidity,
+                          temp: unit.temp,
+                          trays: (unit.tray || []).map((t: any) => {
+                            const rawColor = String(t.tray_color || "FFFFFF");
+                            const hexColor = rawColor.length === 8 ? `#${rawColor.slice(0, 6)}` : rawColor.startsWith("#") ? rawColor : `#${rawColor}`;
+                            return {
+                              id: String(t.id),
+                              color: hexColor,
+                              type: t.tray_type || "Vazio",
+                              subBrand: t.tray_sub_brands || "",
+                              remain: t.remain !== undefined ? Number(t.remain) : 100,
+                              active: String(print.ams?.tray_now) === String(t.id),
+                              loaded: Boolean(t.tray_type && t.tray_type !== ""),
+                            };
+                          }),
+                        })),
+                        activeTray: print.ams?.tray_now !== undefined ? String(print.ams.tray_now) : null,
                       }
                     }));
                   }
