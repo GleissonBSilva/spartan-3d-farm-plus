@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw, Thermometer, Fan, Layers } from 'lucide-react';
 import { useSaaSData } from '@/context/SaaSDataContext';
 import { Impressora3D } from '@/types/saas';
 import { toast } from 'sonner';
@@ -264,6 +264,75 @@ export const ParqueImpressoras: React.FC = () => {
       }, 3000);
     }
   };
+
+  interface PrinterTelemetry {
+    gcodeState: string;
+    nozzleTemp: number | null;
+    nozzleTargetTemp: number | null;
+    bedTemp: number | null;
+    bedTargetTemp: number | null;
+    progressPercent: number | null;
+    remainingTimeMinutes: number | null;
+    subtaskName: string | null;
+    layerNum: number | null;
+    totalLayerNum: number | null;
+    fanSpeed?: number | null;
+    lastUpdated: number;
+  }
+
+  const [telemetryMap, setTelemetryMap] = useState<Record<string, PrinterTelemetry>>({});
+
+  // Polling em tempo real de telemetria via MQTT para impressoras Bambu Lab
+  useEffect(() => {
+    const bambuPrinters = impressoras.filter(p => p.tipoConexao === 'bambu_lab' && p.ipRede && p.accessCode);
+    if (bambuPrinters.length === 0) return;
+
+    let mounted = true;
+
+    const pollTelemetry = async () => {
+      for (const printer of bambuPrinters) {
+        if (!mounted || !printer.ipRede || !printer.accessCode) continue;
+        try {
+          const cleanIp = printer.ipRede.replace(/^https?:\/\//, '').split(':')[0].trim();
+          const params = new URLSearchParams({
+            ip: cleanIp,
+            serial: printer.serialNumber || '',
+            accessCode: printer.accessCode,
+          });
+          const res = await fetch(`/api/printer/telemetry?${params.toString()}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data.success && data.data && mounted) {
+            const telemetry: PrinterTelemetry = {
+              ...data.data,
+              lastUpdated: Date.now(),
+            };
+            setTelemetryMap(prev => ({ ...prev, [printer.id]: telemetry }));
+            setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: true }));
+
+            // Sincroniza progresso real da máquina
+            if (telemetry.progressPercent !== null && telemetry.progressPercent >= 0) {
+              setProgressDraft(prev => ({ ...prev, [printer.id]: telemetry.progressPercent! }));
+            }
+
+            // BAIXA AUTOMÁTICA NO ESTOQUE: Se a impressora finalizou (FINISH) e tinha projeto alocado
+            if (telemetry.gcodeState === 'FINISH' && printer.projetoAtualId && printer.status === 'imprimindo') {
+              void handleConcluirTrabalho(printer, true);
+            }
+          }
+        } catch {
+          // ignora falhas transitórias de rede
+        }
+      }
+    };
+
+    void pollTelemetry();
+    const interval = setInterval(pollTelemetry, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [impressoras]);
 
   const [nome, setNome] = useState('');
   const [modelo, setModelo] = useState('');
@@ -775,6 +844,92 @@ export const ParqueImpressoras: React.FC = () => {
                   {testingPrinterId === printer.id ? 'Verificando...' : 'Testar Conexão'}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* PAINEL DE TELEMETRIA AO VIVO (MQTT) */}
+          {telemetryMap[printer.id] && (
+            <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Telemetria ao Vivo (Bambu Lab)
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Estado: <strong className="text-white uppercase">{telemetryMap[printer.id].gcodeState}</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                {/* Temperatura do Bico */}
+                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-rose-500/10 text-rose-400">
+                    <Thermometer className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Bico (Hotend)</span>
+                    <strong className="text-white text-xs">
+                      {telemetryMap[printer.id].nozzleTemp !== null ? `${telemetryMap[printer.id].nozzleTemp}°C` : '--'}
+                    </strong>
+                    {telemetryMap[printer.id].nozzleTargetTemp ? (
+                      <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].nozzleTargetTemp}°</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Temperatura da Mesa */}
+                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-400">
+                    <Thermometer className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Mesa (Bed)</span>
+                    <strong className="text-white text-xs">
+                      {telemetryMap[printer.id].bedTemp !== null ? `${telemetryMap[printer.id].bedTemp}°C` : '--'}
+                    </strong>
+                    {telemetryMap[printer.id].bedTargetTemp ? (
+                      <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].bedTargetTemp}°</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Camada Atual */}
+                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-sky-500/10 text-sky-400">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Camadas</span>
+                    <strong className="text-white text-xs">
+                      {telemetryMap[printer.id].layerNum !== null ? telemetryMap[printer.id].layerNum : '--'}
+                    </strong>
+                    {telemetryMap[printer.id].totalLayerNum ? (
+                      <span className="text-[10px] text-slate-500 ml-1">/{telemetryMap[printer.id].totalLayerNum}</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Tempo Restante Real */}
+                <div className="rounded-lg bg-slate-950/80 border border-slate-800 p-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-400">
+                    <Clock3 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Tempo Restante</span>
+                    <strong className="text-white text-xs">
+                      {telemetryMap[printer.id].remainingTimeMinutes !== null
+                        ? `${telemetryMap[printer.id].remainingTimeMinutes} min`
+                        : '--'}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {telemetryMap[printer.id].subtaskName && (
+                <div className="text-[11px] text-slate-400 truncate pt-1 flex items-center gap-1.5">
+                  <span className="text-slate-500">Arquivo Bambu Studio:</span>
+                  <span className="font-mono text-white text-xs">{telemetryMap[printer.id].subtaskName}</span>
+                </div>
+              )}
             </div>
           )}
 

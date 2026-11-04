@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Suspense, lazy, useCallback, useState } from 'react';
+import JSZip from 'jszip';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -108,6 +109,69 @@ export const GcodeAnalyzerModal: React.FC<GcodeAnalyzerModalProps> = ({
         else if (content.includes('PrusaSlicer')) slicer = 'PrusaSlicer';
         else if (content.includes('BambuStudio')) slicer = 'Bambu Studio';
         else if (content.includes('OrcaSlicer')) slicer = 'OrcaSlicer';
+      } else if (extension === '3mf') {
+        slicer = 'Bambu Studio (.3MF)';
+        try {
+          const zip = await JSZip.loadAsync(file);
+          const sliceInfoFile = zip.file(/Metadata\/slice_info\.config/i)[0] || zip.file(/slice_info\.config/i)[0];
+          const gcodeFile = zip.file(/\.gcode$/i)[0];
+
+          let gcodeText = '';
+          if (gcodeFile) {
+            gcodeText = await gcodeFile.async('text');
+          }
+
+          if (sliceInfoFile) {
+            const configText = await sliceInfoFile.async('text');
+            slicer = configText.includes('OrcaSlicer') ? 'OrcaSlicer (.3MF)' : 'Bambu Studio (.3MF)';
+
+            const weightMatches = [...configText.matchAll(/used_g=["']([\d.]+)["']/g)];
+            if (weightMatches.length > 0) {
+              weight = Number(weightMatches.reduce((acc, m) => acc + Number(m[1] || 0), 0).toFixed(2));
+            } else {
+              const weightAttr = configText.match(/weight(?:_g)?=["']([\d.]+)["']/i);
+              if (weightAttr) weight = Number(weightAttr[1]);
+            }
+
+            const predictionMatch = configText.match(/prediction=["'](\d+)["']/i);
+            if (predictionMatch) {
+              hours = Number((Number(predictionMatch[1]) / 3600).toFixed(4));
+            }
+
+            const layerAttr = configText.match(/total_layer_number=["'](\d+)["']/i);
+            if (layerAttr) layers = Number(layerAttr[1]);
+
+            const bedAttr = configText.match(/bed_temperature=["']([\d.]+)["']/i);
+            if (bedAttr) bed = Number(bedAttr[1]);
+            const nozzleAttr = configText.match(/nozzle_temperature(?:_initial_layer)?=["']([\d.]+)["']/i);
+            if (nozzleAttr) nozzle = Number(nozzleAttr[1]);
+          }
+
+          if (gcodeText) {
+            if (!hours) {
+              const humanTime = gcodeText.match(/estimated printing time(?: \(normal mode\))?\s*=\s*(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?/i);
+              const secondsMatch = gcodeText.match(/(?:^|\n);?\s*TIME\s*:\s*(\d+)/i);
+              if (humanTime) {
+                const h = Number(humanTime[1] || 0);
+                const m = Number(humanTime[2] || 0);
+                const s = Number(humanTime[3] || 0);
+                hours = Number(((h * 3600 + m * 60 + s) / 3600).toFixed(4));
+              } else if (secondsMatch) {
+                hours = Number((Number(secondsMatch[1]) / 3600).toFixed(4));
+              }
+            }
+            if (!weight) {
+              const weightMatch = gcodeText.match(/(?:filament used|total filament weight|filament weight)\s*(?:\[g\])?\s*[:=]\s*([\d.]+)/i);
+              if (weightMatch) weight = Number(weightMatch[1]);
+            }
+            if (!layers) {
+              const layerMatch = gcodeText.match(/(?:total_layer_number|total_layer_count|LAYER_COUNT)\s*[:=]\s*(\d+)/i);
+              if (layerMatch) layers = Number(layerMatch[1]);
+            }
+          }
+        } catch (zipErr) {
+          console.warn('Erro ao descompactar 3MF via JSZip:', zipErr);
+        }
       }
 
       const mockFilePath = `local-browser-parse/${file.name}`;
