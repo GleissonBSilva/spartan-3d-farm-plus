@@ -79,6 +79,10 @@ export interface Impressora3D {
   custoInvestimento?: number;
   vidaUtilHoras?: number;
   depreciacaoHora?: number;
+  tipoConexao?: 'manual' | 'bambu_lab' | 'klipper' | 'octoprint';
+  ipRede?: string;
+  serialNumber?: string;
+  accessCode?: string;
 }
 
 export interface EventoImpressora {

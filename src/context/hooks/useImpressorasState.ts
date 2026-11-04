@@ -24,6 +24,9 @@ type PrinterRow = {
   lifespan_hours?: number | null;
   depreciation_per_hour?: number | null;
   hourly_depreciation?: number | null;
+  integration?: string | null;
+  integration_url?: string | null;
+  integration_secret_encrypted?: string | null;
 };
 type PrinterEventRow = { id: string; printer_id: string; event_type: string; payload: Record<string, unknown>; created_at: string };
 const fromRow = (row: PrinterRow): Impressora3D => {
@@ -32,6 +35,18 @@ const fromRow = (row: PrinterRow): Impressora3D => {
   const vidaUtilHoras = row.lifespan_hours !== undefined && row.lifespan_hours !== null && Number(row.lifespan_hours) > 0 ? Number(row.lifespan_hours) : 5000;
   const rawDep = Number(row.depreciation_per_hour || row.hourly_depreciation || 0);
   const depreciacaoHora = rawDep > 0 ? rawDep : Number((custoInvestimento / vidaUtilHoras).toFixed(2));
+
+  let serialNumber: string | undefined;
+  let accessCode: string | undefined;
+  if (row.integration_secret_encrypted) {
+    try {
+      const parsed = JSON.parse(row.integration_secret_encrypted);
+      serialNumber = parsed.serialNumber;
+      accessCode = parsed.accessCode;
+    } catch {
+      serialNumber = row.integration_secret_encrypted;
+    }
+  }
 
   return {
     id: row.id,
@@ -51,6 +66,10 @@ const fromRow = (row: PrinterRow): Impressora3D => {
     custoInvestimento,
     vidaUtilHoras,
     depreciacaoHora,
+    tipoConexao: (row.integration as Impressora3D['tipoConexao']) || 'manual',
+    ipRede: row.integration_url || undefined,
+    serialNumber,
+    accessCode,
   };
 };
 
@@ -101,6 +120,10 @@ export function useImpressorasState(currentPlan: Plan) {
     const invCost = imp.custoInvestimento !== undefined ? Number(imp.custoInvestimento) : 5000;
     const lifeHours = imp.vidaUtilHoras !== undefined && Number(imp.vidaUtilHoras) > 0 ? Number(imp.vidaUtilHoras) : 5000;
     const depHour = imp.depreciacaoHora !== undefined ? Number(imp.depreciacaoHora) : Number((invCost / lifeHours).toFixed(2));
+    const secretPayload = imp.serialNumber || imp.accessCode
+      ? JSON.stringify({ serialNumber: imp.serialNumber || '', accessCode: imp.accessCode || '' })
+      : null;
+
     void Promise.resolve(supabase.from('spartan_printers').insert({
       company_id: user.companyId, name: imp.nome, model: imp.modelo, type: imp.tipo === 'FDM' ? 'FDM' : 'SLA',
       status: imp.status, power_watts: imp.potenciaWatts, nozzle_mm: imp.bicoMm, hours_used: imp.horasUso,
@@ -110,6 +133,9 @@ export function useImpressorasState(currentPlan: Plan) {
       investment_cost: invCost,
       lifespan_hours: lifeHours,
       depreciation_per_hour: depHour,
+      integration: imp.tipoConexao || 'manual',
+      integration_url: imp.ipRede || null,
+      integration_secret_encrypted: secretPayload,
     }).select('*').single()).then(({ data, error }) => {
       if (error) throw error;
       setImpressoras(prev => [fromRow(data as PrinterRow), ...prev]);
@@ -159,6 +185,14 @@ export function useImpressorasState(currentPlan: Plan) {
       if (imp.custoInvestimento !== undefined) updateData.investment_cost = imp.custoInvestimento;
       if (imp.vidaUtilHoras !== undefined) updateData.lifespan_hours = imp.vidaUtilHoras;
       if (imp.depreciacaoHora !== undefined) updateData.depreciation_per_hour = imp.depreciacaoHora;
+      if (imp.tipoConexao !== undefined) updateData.integration = imp.tipoConexao;
+      if (imp.ipRede !== undefined) updateData.integration_url = imp.ipRede;
+      if (imp.serialNumber !== undefined || imp.accessCode !== undefined) {
+        updateData.integration_secret_encrypted = JSON.stringify({
+          serialNumber: imp.serialNumber || '',
+          accessCode: imp.accessCode || '',
+        });
+      }
 
       const { data, error } = await supabase.from('spartan_printers')
         .update(updateData)

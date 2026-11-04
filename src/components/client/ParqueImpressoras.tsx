@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useSaaSData } from '@/context/SaaSDataContext';
 import { Impressora3D } from '@/types/saas';
 import { toast } from 'sonner';
@@ -52,11 +52,13 @@ export const ParqueImpressoras: React.FC = () => {
   // Estado local para exclusão manual garantida e metadados customizados (estritamente isolados por user.id)
   const [deletedPrinterIds, setDeletedPrinterIds] = useState<string[]>([]);
   const [customInvestments, setCustomInvestments] = useState<Record<string, { custoInvestimento: number; vidaUtilHoras: number; depreciacaoHora: number }>>({});
+  const [customConnections, setCustomConnections] = useState<Record<string, { tipoConexao?: Impressora3D['tipoConexao']; ipRede?: string; serialNumber?: string; accessCode?: string }>>({});
 
   useEffect(() => {
     if (!user?.id) {
       setDeletedPrinterIds([]);
       setCustomInvestments({});
+      setCustomConnections({});
       return;
     }
     try {
@@ -65,6 +67,9 @@ export const ParqueImpressoras: React.FC = () => {
 
       const savedInv = localStorage.getItem(`ph3d_printer_investments_v2_${user.id}`);
       setCustomInvestments(savedInv ? JSON.parse(savedInv) : {});
+
+      const savedConn = localStorage.getItem(`ph3d_printer_connections_${user.id}`);
+      setCustomConnections(savedConn ? JSON.parse(savedConn) : {});
     } catch (e) {
       console.error('Erro ao carregar dados do parque de impressoras do localStorage:', e);
     }
@@ -77,6 +82,7 @@ export const ParqueImpressoras: React.FC = () => {
       .filter(p => !deletedPrinterIds.includes(p.id))
       .map(p => {
         const custom = customInvestments[p.id];
+        const conn = customConnections[p.id];
         const activeProjForPrinter =
           projetos.find(
             proj =>
@@ -101,6 +107,10 @@ export const ParqueImpressoras: React.FC = () => {
           status: effectiveStatus,
           projetoAtualId: resolvedProjectId,
           projetoAtual: p.projetoAtual || activeProjForPrinter?.nomePeca || (resolvedProjectId ? 'Projeto em produção' : undefined),
+          tipoConexao: conn?.tipoConexao || p.tipoConexao || 'manual',
+          ipRede: conn?.ipRede || p.ipRede,
+          serialNumber: conn?.serialNumber || p.serialNumber,
+          accessCode: conn?.accessCode || p.accessCode,
         };
 
         if (custom && custom.custoInvestimento > 0) {
@@ -113,9 +123,15 @@ export const ParqueImpressoras: React.FC = () => {
         }
         return basePrinter;
       });
-  }, [rawImpressoras, deletedPrinterIds, customInvestments, projetos]);
+  }, [rawImpressoras, deletedPrinterIds, customInvestments, customConnections, projetos]);
 
   const [showAddForm, setShowAddForm] = useState(false);
+  const [tipoConexao, setTipoConexao] = useState<Impressora3D['tipoConexao']>('manual');
+  const [ipRede, setIpRede] = useState('');
+  const [serialNumber, setSerialNumber] = useState('');
+  const [accessCode, setAccessCode] = useState('');
+  const [showAccessCode, setShowAccessCode] = useState(false);
+
   const [maintenancePrinter, setMaintenancePrinter] = useState<string | null>(null);
   const [maintenanceTasks, setMaintenanceTasks] = useState<string[]>([]);
   const [maintenanceNote, setMaintenanceNote] = useState('');
@@ -131,6 +147,11 @@ export const ParqueImpressoras: React.FC = () => {
   const [editVidaUtil, setEditVidaUtil] = useState<number | string>(5000);
   const [editIntervaloManutencao, setEditIntervaloManutencao] = useState<number | string>(100);
   const [editHorasUso, setEditHorasUso] = useState<number | string>(0);
+  const [editTipoConexao, setEditTipoConexao] = useState<Impressora3D['tipoConexao']>('manual');
+  const [editIpRede, setEditIpRede] = useState('');
+  const [editSerialNumber, setEditSerialNumber] = useState('');
+  const [editAccessCode, setEditAccessCode] = useState('');
+  const [editShowAccessCode, setEditShowAccessCode] = useState(false);
 
   const [remainingSecondsMap, setRemainingSecondsMap] = useState<Record<string, number>>({});
   const completingPrintersRef = React.useRef<Set<string>>(new Set());
@@ -316,12 +337,20 @@ export const ParqueImpressoras: React.FC = () => {
       intervaloManutencaoHoras: serviceInterval,
       custoInvestimento: valorInvestimento,
       vidaUtilHoras: horasVidaUtil,
-      depreciacaoHora: depreciacaoCalculada
+      depreciacaoHora: depreciacaoCalculada,
+      tipoConexao,
+      ipRede: tipoConexao !== 'manual' ? ipRede.trim() : undefined,
+      serialNumber: tipoConexao === 'bambu_lab' ? serialNumber.trim() : undefined,
+      accessCode: tipoConexao === 'bambu_lab' ? accessCode.trim() : undefined,
     });
 
     if (saved) { 
       setNome(''); 
       setModelo(''); 
+      setTipoConexao('manual');
+      setIpRede('');
+      setSerialNumber('');
+      setAccessCode('');
       setShowAddForm(false); 
       toast.success(`Impressora cadastrada! Depreciação: R$ ${depreciacaoCalculada.toFixed(2)}/h`);
     }
@@ -339,6 +368,12 @@ export const ParqueImpressoras: React.FC = () => {
     const currentCustom = customInvestments[printer.id];
     setEditPrecoCompra(currentCustom && currentCustom.custoInvestimento > 0 ? currentCustom.custoInvestimento : (printer.custoInvestimento || 5000));
     setEditVidaUtil(currentCustom && currentCustom.vidaUtilHoras > 0 ? currentCustom.vidaUtilHoras : (printer.vidaUtilHoras || 5000));
+
+    const currentConn = customConnections[printer.id];
+    setEditTipoConexao(currentConn?.tipoConexao || printer.tipoConexao || 'manual');
+    setEditIpRede(currentConn?.ipRede || printer.ipRede || '');
+    setEditSerialNumber(currentConn?.serialNumber || printer.serialNumber || '');
+    setEditAccessCode(currentConn?.accessCode || printer.accessCode || '');
   };
 
   const handleUpdate = (event: React.FormEvent) => {
@@ -366,11 +401,24 @@ export const ParqueImpressoras: React.FC = () => {
     };
 
     setCustomInvestments(updatedCustoms);
+
+    const updatedConnections = {
+      ...customConnections,
+      [editingPrinterId]: {
+        tipoConexao: editTipoConexao,
+        ipRede: editTipoConexao !== 'manual' ? editIpRede.trim() : undefined,
+        serialNumber: editTipoConexao === 'bambu_lab' ? editSerialNumber.trim() : undefined,
+        accessCode: editTipoConexao === 'bambu_lab' ? editAccessCode.trim() : undefined,
+      }
+    };
+    setCustomConnections(updatedConnections);
+
     if (user?.id) {
       try {
         localStorage.setItem(`ph3d_printer_investments_v2_${user.id}`, JSON.stringify(updatedCustoms));
+        localStorage.setItem(`ph3d_printer_connections_${user.id}`, JSON.stringify(updatedConnections));
       } catch (e) {
-        console.error('Erro ao salvar investimentos customizados no localStorage:', e);
+        console.error('Erro ao salvar dados no localStorage:', e);
       }
     }
 
@@ -384,9 +432,13 @@ export const ParqueImpressoras: React.FC = () => {
       custoInvestimento: valorInvestimento,
       vidaUtilHoras: horasVidaUtil,
       depreciacaoHora: depreciacaoCalculada,
+      tipoConexao: editTipoConexao,
+      ipRede: editTipoConexao !== 'manual' ? editIpRede.trim() : undefined,
+      serialNumber: editTipoConexao === 'bambu_lab' ? editSerialNumber.trim() : undefined,
+      accessCode: editTipoConexao === 'bambu_lab' ? editAccessCode.trim() : undefined,
     });
 
-    toast.success('Dados, investimento e vida útil salvos com sucesso!');
+    toast.success('Dados, investimento e comunicação salvos com sucesso!');
     setEditingPrinterId(null);
   };
 
@@ -403,12 +455,17 @@ export const ParqueImpressoras: React.FC = () => {
       delete updatedCustoms[id];
       setCustomInvestments(updatedCustoms);
 
+      const updatedConnections = { ...customConnections };
+      delete updatedConnections[id];
+      setCustomConnections(updatedConnections);
+
       if (user?.id) {
         try {
           localStorage.setItem(`ph3d_deleted_printers_${user.id}`, JSON.stringify(newDeleted));
           localStorage.setItem(`ph3d_printer_investments_v2_${user.id}`, JSON.stringify(updatedCustoms));
+          localStorage.setItem(`ph3d_printer_connections_${user.id}`, JSON.stringify(updatedConnections));
         } catch (e) {
-          console.error('Erro ao salvar impressoras excluídas no localStorage:', e);
+          console.error(e);
         }
       }
 
@@ -478,6 +535,107 @@ export const ParqueImpressoras: React.FC = () => {
         <Field label="Preço de Investimento / Compra (R$)"><Input type="number" min="0" step="0.01" placeholder="Ex: 5000.00" value={precoCompra} onChange={event => setPrecoCompra(event.target.value)} className="border-slate-700 bg-slate-950 text-white" /></Field>
         <Field label="Vida útil estimada (Horas de uso)"><Input type="number" min="100" step="100" placeholder="Ex: 5000" value={vidaUtilHoras} onChange={event => setVidaUtilHoras(event.target.value)} className="border-slate-700 bg-slate-950 text-white" /></Field>
         <Field label="Manutenção a cada (h)"><Input type="number" min="1" step="1" value={serviceInterval} onChange={event => setServiceInterval(Number(event.target.value))} className="border-slate-700 bg-slate-950 text-white" /></Field>
+        
+        {/* SEÇÃO DE COMUNICAÇÃO E INTEGRAÇÃO POR IMPRESSORA */}
+        <div className="lg:col-span-4 rounded-xl border border-indigo-500/30 bg-slate-950/70 p-4 mt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+              <Wifi className="w-4 h-4 text-indigo-400" /> Integração de Rede & Fatiador (Bambu Lab / Klipper)
+            </span>
+            <span className="text-[11px] text-slate-400">Configure os dados individuais desta impressora</span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Tipo de Conexão">
+              <select
+                value={tipoConexao}
+                onChange={e => setTipoConexao(e.target.value as Impressora3D['tipoConexao'])}
+                className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="manual">Manual (Sem conexão de rede)</option>
+                <option value="bambu_lab">Bambu Lab (Modo LAN / Bambu Studio)</option>
+                <option value="klipper">Klipper / Moonraker</option>
+                <option value="octoprint">OctoPrint</option>
+              </select>
+            </Field>
+
+            {tipoConexao === 'bambu_lab' && (
+              <>
+                <Field label="IP Local da Impressora">
+                  <Input
+                    placeholder="Ex.: 192.168.0.102"
+                    value={ipRede}
+                    onChange={e => setIpRede(e.target.value)}
+                    className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                  />
+                </Field>
+                <Field label="Nº de Série (Serial)">
+                  <Input
+                    placeholder="Ex.: 03919D520905950"
+                    value={serialNumber}
+                    onChange={e => setSerialNumber(e.target.value)}
+                    className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                  />
+                </Field>
+                <Field label="Código de Acesso LAN (Access Code)">
+                  <div className="relative">
+                    <Input
+                      type={showAccessCode ? "text" : "password"}
+                      placeholder="Ex.: 8 dígitos da tela"
+                      value={accessCode}
+                      onChange={e => setAccessCode(e.target.value)}
+                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs pr-9"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAccessCode(prev => !prev)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                      tabIndex={-1}
+                    >
+                      {showAccessCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </Field>
+              </>
+            )}
+
+            {tipoConexao === 'klipper' && (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <Field label="URL do Moonraker / Klipper">
+                  <Input
+                    placeholder="Ex.: http://192.168.0.105:7125"
+                    value={ipRede}
+                    onChange={e => setIpRede(e.target.value)}
+                    className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                  />
+                </Field>
+              </div>
+            )}
+
+            {tipoConexao === 'octoprint' && (
+              <>
+                <Field label="URL do OctoPrint">
+                  <Input
+                    placeholder="Ex.: http://192.168.0.105:5000"
+                    value={ipRede}
+                    onChange={e => setIpRede(e.target.value)}
+                    className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                  />
+                </Field>
+                <Field label="API Key">
+                  <Input
+                    type="password"
+                    placeholder="API Key do OctoPrint"
+                    value={accessCode}
+                    onChange={e => setAccessCode(e.target.value)}
+                    className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                  />
+                </Field>
+              </>
+            )}
+          </div>
+        </div>
+
         <div className="flex items-end gap-2 lg:col-span-4 mt-2">
           <Button type="submit" className="bg-indigo-600 text-white hover:bg-indigo-500">Salvar impressora com ROI</Button>
           <Button type="button" variant="outline" onClick={() => setShowAddForm(false)} className="border-slate-700 bg-slate-950 text-slate-200 hover:bg-slate-800 hover:text-white">Cancelar</Button>
@@ -543,6 +701,23 @@ export const ParqueImpressoras: React.FC = () => {
             </span>
             <span className="text-slate-300">Depreciação: <strong className="text-emerald-400">R$ {depreciacaoH.toFixed(2)}/h</strong></span>
           </div>
+
+          {/* BADGE DE COMUNICAÇÃO DE REDE DA IMPRESSORA */}
+          {printer.tipoConexao && printer.tipoConexao !== 'manual' && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-950/70 border border-slate-800 px-3.5 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Wifi className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="font-semibold text-slate-200">
+                  {printer.tipoConexao === 'bambu_lab' ? 'Bambu Lab (Modo LAN)' : printer.tipoConexao === 'klipper' ? 'Klipper / Moonraker' : 'OctoPrint'}
+                </span>
+                {printer.ipRede && <span className="font-mono text-[11px] text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30">{printer.ipRede}</span>}
+                {printer.serialNumber && <span className="font-mono text-[11px] text-slate-500 hidden sm:inline">S/N: {printer.serialNumber}</span>}
+              </div>
+              <Badge variant="outline" className="text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" /> Conectada
+              </Badge>
+            </div>
+          )}
 
           {printer.projetoAtualId ? (
             <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
@@ -681,6 +856,103 @@ export const ParqueImpressoras: React.FC = () => {
             <Field label="Vida útil (Horas)"><Input type="number" step="100" value={editVidaUtil} onChange={e => setEditVidaUtil(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
             <Field label="Manutenção a cada (h)"><Input type="number" min="1" step="1" value={editIntervaloManutencao} onChange={e => setEditIntervaloManutencao(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
             <Field label="Horas de impressão acumuladas"><Input type="number" min="0" step="0.5" value={editHorasUso} onChange={e => setEditHorasUso(e.target.value)} className="bg-slate-950 text-white border-slate-700" /></Field>
+          </div>
+
+          {/* CONFIGURAÇÃO DE COMUNICAÇÃO INDIVIDUAL */}
+          <div className="rounded-xl border border-indigo-500/30 bg-slate-950/70 p-3.5 space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+              <Wifi className="w-3.5 h-3.5" /> Comunicação & Fatiador desta Impressora
+            </span>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Tipo de Conexão">
+                <select
+                  value={editTipoConexao}
+                  onChange={e => setEditTipoConexao(e.target.value as Impressora3D['tipoConexao'])}
+                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="manual">Manual (Sem conexão de rede)</option>
+                  <option value="bambu_lab">Bambu Lab (Modo LAN / Bambu Studio)</option>
+                  <option value="klipper">Klipper / Moonraker</option>
+                  <option value="octoprint">OctoPrint</option>
+                </select>
+              </Field>
+
+              {editTipoConexao === 'bambu_lab' && (
+                <>
+                  <Field label="IP Local da Impressora">
+                    <Input
+                      placeholder="Ex.: 192.168.0.102"
+                      value={editIpRede}
+                      onChange={e => setEditIpRede(e.target.value)}
+                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                    />
+                  </Field>
+                  <Field label="Nº de Série (Serial)">
+                    <Input
+                      placeholder="Ex.: 03919D520905950"
+                      value={editSerialNumber}
+                      onChange={e => setEditSerialNumber(e.target.value)}
+                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                    />
+                  </Field>
+                  <Field label="Código de Acesso LAN">
+                    <div className="relative">
+                      <Input
+                        type={editShowAccessCode ? "text" : "password"}
+                        placeholder="Ex.: 8 dígitos"
+                        value={editAccessCode}
+                        onChange={e => setEditAccessCode(e.target.value)}
+                        className="border-slate-700 bg-slate-900 text-white font-mono text-xs pr-9"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditShowAccessCode(prev => !prev)}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                        tabIndex={-1}
+                      >
+                        {editShowAccessCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </Field>
+                </>
+              )}
+
+              {editTipoConexao === 'klipper' && (
+                <div className="sm:col-span-2">
+                  <Field label="URL do Moonraker / Klipper">
+                    <Input
+                      placeholder="Ex.: http://192.168.0.105:7125"
+                      value={editIpRede}
+                      onChange={e => setEditIpRede(e.target.value)}
+                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {editTipoConexao === 'octoprint' && (
+                <>
+                  <Field label="URL do OctoPrint">
+                    <Input
+                      placeholder="Ex.: http://192.168.0.105:5000"
+                      value={editIpRede}
+                      onChange={e => setEditIpRede(e.target.value)}
+                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                    />
+                  </Field>
+                  <Field label="API Key">
+                    <Input
+                      type="password"
+                      placeholder="API Key do OctoPrint"
+                      value={editAccessCode}
+                      onChange={e => setEditAccessCode(e.target.value)}
+                      className="border-slate-700 bg-slate-900 text-white font-mono text-xs"
+                    />
+                  </Field>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
