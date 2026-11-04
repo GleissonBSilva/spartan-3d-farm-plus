@@ -260,8 +260,8 @@ export default defineConfig(() => ({
 
           // Se já temos telemetria em cache, devolve instantaneamente (<1ms)
           if (session.lastData) {
-            // Mantém os dados frescos requisitando pushall a cada 30 segundos
-            if (Date.now() - session.lastPushall > 30000 && session.client) {
+            // Mantém os dados perfeitamente sincronizados requisitando pushall a cada 10 segundos
+            if (Date.now() - session.lastPushall > 10000 && session.client) {
               const reqTopic = serial ? `device/${serial}/request` : "device/report";
               try {
                 session.client.publish(reqTopic, JSON.stringify({ pushing: { sequence_id: "1", command: "pushall" } }));

@@ -199,6 +199,7 @@ export const ParqueImpressoras: React.FC = () => {
 
   const [remainingSecondsMap, setRemainingSecondsMap] = useState<Record<string, number>>({});
   const completingPrintersRef = React.useRef<Set<string>>(new Set());
+  const lastSyncedStatusRef = React.useRef<Record<string, string>>({});
 
   const getTimerStorageKey = () => (user?.id ? `ph3d_active_print_timers_${user.id}` : null);
 
@@ -359,6 +360,13 @@ export const ParqueImpressoras: React.FC = () => {
 
   const [telemetryMap, setTelemetryMap] = useState<Record<string, PrinterTelemetry>>({});
 
+  const bambuPrintersConfigKey = useMemo(() => {
+    return impressoras
+      .filter(p => p.tipoConexao === 'bambu_lab')
+      .map(p => `${p.id}:${p.ipRede}:${p.accessCode}`)
+      .join('|');
+  }, [impressoras]);
+
   // Polling em tempo real de telemetria via MQTT para impressoras Bambu Lab
   useEffect(() => {
     const bambuPrinters = impressoras.filter(p => p.tipoConexao === 'bambu_lab' && p.ipRede && p.accessCode);
@@ -379,9 +387,6 @@ export const ParqueImpressoras: React.FC = () => {
           const res = await fetch(`/api/printer/telemetry?${params.toString()}`);
           if (!res.ok) {
             setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: false }));
-            if (printer.status !== 'desconectada' && printer.status !== 'manutencao') {
-              updateImpressoraStatus(printer.id, 'desconectada');
-            }
             continue;
           }
           const data = await res.json();
@@ -401,44 +406,40 @@ export const ParqueImpressoras: React.FC = () => {
             // ATUALIZAÇÃO DO STATUS DA IMPRESSORA CONFORME A CONEXÃO E O ESTADO REAL (GCODE_STATE):
             const gState = (telemetry.gcodeState || '').toUpperCase();
 
+            let targetStatus: Impressora3D['status'] | null = null;
             if (gState === 'RUNNING' || gState === 'PREPARE') {
-              if (printer.status !== 'imprimindo' && printer.status !== 'manutencao') {
-                updateImpressoraStatus(printer.id, 'imprimindo');
-              }
+              targetStatus = 'imprimindo';
             } else if (gState === 'PAUSE') {
-              if (printer.status !== 'pausada' && printer.status !== 'manutencao') {
-                updateImpressoraStatus(printer.id, 'pausada');
-              }
+              targetStatus = 'pausada';
             } else if (gState === 'FINISH') {
-              // Finalizou: conclui trabalho, baixa o estoque e libera a máquina para 'disponivel'
+              // Finalizou o trabalho: conclui e dá baixa no estoque
               void handleConcluirTrabalho(printer, true, telemetry);
             } else if (gState === 'IDLE' || gState === 'FAILED') {
               if (printer.status === 'desconectada') {
-                updateImpressoraStatus(printer.id, 'disponivel');
+                targetStatus = 'disponivel';
               }
+            }
+
+            if (targetStatus && printer.status !== targetStatus && printer.status !== 'manutencao' && lastSyncedStatusRef.current[printer.id] !== targetStatus) {
+              lastSyncedStatusRef.current[printer.id] = targetStatus;
+              updateImpressoraStatus(printer.id, targetStatus);
             }
           } else if (!data.success && mounted) {
             setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: false }));
-            if (printer.status !== 'desconectada' && printer.status !== 'manutencao') {
-              updateImpressoraStatus(printer.id, 'desconectada');
-            }
           }
         } catch {
           setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: false }));
-          if (printer.status !== 'desconectada' && printer.status !== 'manutencao') {
-            updateImpressoraStatus(printer.id, 'desconectada');
-          }
         }
       }
     };
 
     void pollTelemetry();
-    const interval = setInterval(pollTelemetry, 5000);
+    const interval = setInterval(pollTelemetry, 3000);
     return () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, [impressoras]);
+  }, [bambuPrintersConfigKey]);
 
   const [nome, setNome] = useState('');
   const [modelo, setModelo] = useState('');
@@ -449,7 +450,12 @@ export const ParqueImpressoras: React.FC = () => {
   const [vidaUtilHoras, setVidaUtilHoras] = useState<number | string>(5000); 
 
   useEffect(() => {
-    const activePrinters = impressoras.filter(p => (p.status === 'imprimindo' || p.status === 'pausada') && p.projetoAtualId);
+    // Sincronização de timer estimada APENAS para impressoras manuais (sem telemetria de rede)
+    const activePrinters = impressoras.filter(p => 
+      (p.status === 'imprimindo' || p.status === 'pausada') && 
+      p.projetoAtualId &&
+      p.tipoConexao === 'manual'
+    );
     if (activePrinters.length === 0) return;
 
     const syncTick = () => {
@@ -870,11 +876,21 @@ export const ParqueImpressoras: React.FC = () => {
       {impressoras.map(printer => {
         const status = STATUS[printer.status];
         const currentProject = projetos.find(project => project.id === printer.projetoAtualId);
-        const progress = progressDraft[printer.id] ?? printer.progressoPercentual ?? 0;
+        const liveTelemetry = telemetryMap[printer.id];
+        const hasLiveTelemetry = Boolean(liveTelemetry && printer.tipoConexao === 'bambu_lab');
+
+        // Progresso 100% sincronizado com a impressora Bambu Lab
+        const progress = hasLiveTelemetry && liveTelemetry.progressPercent !== null && liveTelemetry.progressPercent !== undefined
+          ? liveTelemetry.progressPercent
+          : (progressDraft[printer.id] ?? printer.progressoPercentual ?? 0);
         
         const rawTempoEstimado = currentProject?.tempoEstimadoHoras ?? 18;
         const totalSecondsEstimated = parseAndSanitizeEstimatedSeconds(rawTempoEstimado);
-        const remainingPrintSeconds = remainingSecondsMap[printer.id] ?? Math.round(totalSecondsEstimated * (1 - (Math.min(100, Math.max(0, progress)) / 100)));
+        
+        // Tempo restante 100% sincronizado com a máquina Bambu Lab
+        const remainingPrintSeconds = hasLiveTelemetry && liveTelemetry.remainingTimeMinutes !== null && liveTelemetry.remainingTimeMinutes !== undefined
+          ? Math.max(0, liveTelemetry.remainingTimeMinutes * 60)
+          : (remainingSecondsMap[printer.id] ?? Math.round(totalSecondsEstimated * (1 - (Math.min(100, Math.max(0, progress)) / 100))));
         const elapsedPrintSeconds =
           printer.projetoAtualId && (printer.status === 'imprimindo' || printer.status === 'pausada')
             ? Math.max(0, totalSecondsEstimated - remainingPrintSeconds)
@@ -1140,12 +1156,12 @@ export const ParqueImpressoras: React.FC = () => {
             </div>
           )}
 
-          {printer.projetoAtualId ? (
+          {(printer.projetoAtualId || (hasLiveTelemetry && (liveTelemetry.gcodeState === 'RUNNING' || liveTelemetry.gcodeState === 'PREPARE' || liveTelemetry.gcodeState === 'PAUSE'))) ? (
             <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Projeto atual</p>
-                  <p className="mt-1 font-semibold text-white">{printer.projetoAtual || currentProject?.nomePeca || 'Projeto em andamento'}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Impressão / Peça Atual</p>
+                  <p className="mt-1 font-semibold text-white">{liveTelemetry?.subtaskName || currentProject?.nomePeca || printer.projetoAtual || 'Impressão em andamento'}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-right text-xs text-slate-400">
