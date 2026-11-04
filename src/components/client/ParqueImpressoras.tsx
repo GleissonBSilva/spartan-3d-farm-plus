@@ -153,6 +153,34 @@ export const ParqueImpressoras: React.FC = () => {
   const [editAccessCode, setEditAccessCode] = useState('');
   const [editShowAccessCode, setEditShowAccessCode] = useState(false);
 
+  const [testingPrinterId, setTestingPrinterId] = useState<string | null>(null);
+  const [printerOnlineMap, setPrinterOnlineMap] = useState<Record<string, boolean>>({});
+
+  const handleTestConnection = async (printerId: string, ip: string, tipo: string = 'bambu_lab') => {
+    if (!ip.trim()) {
+      toast.error('Informe o IP da impressora para testar a comunicação.');
+      return;
+    }
+    setTestingPrinterId(printerId);
+    try {
+      const cleanIp = ip.replace(/^https?:\/\//, '').split(':')[0].trim();
+      const res = await fetch(`/api/printer/ping?ip=${encodeURIComponent(cleanIp)}&type=${encodeURIComponent(tipo)}`);
+      const data = await res.json();
+      if (data.success) {
+        setPrinterOnlineMap(prev => ({ ...prev, [printerId]: true }));
+        toast.success(`✅ Comunicação confirmada! A impressora (${cleanIp}) está respondendo perfeitamente na rede!`);
+      } else {
+        setPrinterOnlineMap(prev => ({ ...prev, [printerId]: false }));
+        toast.error(`❌ Não foi possível comunicar com o IP ${cleanIp}: ${data.error || 'Sem resposta'}`);
+      }
+    } catch (error) {
+      setPrinterOnlineMap(prev => ({ ...prev, [printerId]: false }));
+      toast.error(`Falha ao testar conexão: ${error instanceof Error ? error.message : 'Erro inesperado'}`);
+    } finally {
+      setTestingPrinterId(null);
+    }
+  };
+
   const [remainingSecondsMap, setRemainingSecondsMap] = useState<Record<string, number>>({});
   const completingPrintersRef = React.useRef<Set<string>>(new Set());
 
@@ -634,6 +662,23 @@ export const ParqueImpressoras: React.FC = () => {
               </>
             )}
           </div>
+
+          {tipoConexao !== 'manual' && ipRede && (
+            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-800/80 mt-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={testingPrinterId === 'new'}
+                onClick={() => handleTestConnection('new', ipRede, tipoConexao)}
+                className="h-7 text-xs border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${testingPrinterId === 'new' ? 'animate-spin' : ''}`} />
+                {testingPrinterId === 'new' ? 'Testando sinal com o IP...' : 'Testar Conexão Local com a Impressora'}
+              </Button>
+              <span className="text-[11px] text-slate-400">Verifica se a impressora responde na rede antes de salvar.</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-end gap-2 lg:col-span-4 mt-2">
@@ -713,9 +758,23 @@ export const ParqueImpressoras: React.FC = () => {
                 {printer.ipRede && <span className="font-mono text-[11px] text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30">{printer.ipRede}</span>}
                 {printer.serialNumber && <span className="font-mono text-[11px] text-slate-500 hidden sm:inline">S/N: {printer.serialNumber}</span>}
               </div>
-              <Badge variant="outline" className="text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
-                <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" /> Conectada
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={`text-[10px] ${printerOnlineMap[printer.id] ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 bg-slate-900 text-slate-400'}`}>
+                  <span className={`mr-1 h-1.5 w-1.5 rounded-full inline-block ${printerOnlineMap[printer.id] ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                  {printerOnlineMap[printer.id] ? 'Online (Ativa)' : 'Conectada'}
+                </Badge>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={testingPrinterId === printer.id}
+                  onClick={() => handleTestConnection(printer.id, printer.ipRede || '', printer.tipoConexao)}
+                  className="h-6 px-2 text-[10px] font-semibold border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20"
+                >
+                  <RefreshCw className={`w-3 h-3 mr-1 ${testingPrinterId === printer.id ? 'animate-spin' : ''}`} />
+                  {testingPrinterId === printer.id ? 'Verificando...' : 'Testar Conexão'}
+                </Button>
+              </div>
             </div>
           )}
 
