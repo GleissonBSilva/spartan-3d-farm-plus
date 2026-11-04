@@ -26,3 +26,4 @@ echo  Commit restaurado: %checkpoint-stable%
 echo ======================================================
 echo.
 pause
+

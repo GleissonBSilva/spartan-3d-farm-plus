@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw, Thermometer, Fan, Layers, Disc } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw, Thermometer, Fan, Layers, Disc, Package } from 'lucide-react';
 import { useSaaSData } from '@/context/SaaSDataContext';
 import { Impressora3D } from '@/types/saas';
 import { toast } from 'sonner';
@@ -51,6 +51,7 @@ export const ParqueImpressoras: React.FC = () => {
     impressoras: rawImpressoras,
     projetos,
     filamentos,
+    movimentacoes,
     consumirFilamento,
     consumirMultiplosFilamentos,
     historicoImpressoras,
@@ -519,12 +520,43 @@ export const ParqueImpressoras: React.FC = () => {
     return () => clearInterval(interval);
   }, [impressoras, projetos, user?.id]);
 
-  const counts = useMemo(() => ({
-    active: impressoras.filter(item => item.status === 'disponivel' || item.status === 'imprimindo').length,
-    paused: impressoras.filter(item => item.status === 'pausada').length,
-    offline: impressoras.filter(item => item.status === 'desconectada').length,
-    maintenance: impressoras.filter(item => item.status === 'manutencao').length,
-  }), [impressoras]);
+  const counts = useMemo(() => {
+    const printing = impressoras.filter(item => item.status === 'imprimindo').length;
+    const available = impressoras.filter(item => item.status === 'disponivel').length;
+    const paused = impressoras.filter(item => item.status === 'pausada').length;
+    const offline = impressoras.filter(item => item.status === 'desconectada').length;
+    const maintenance = impressoras.filter(item => item.status === 'manutencao').length;
+
+    const totalConsumoGrams = movimentacoes
+      .filter(m => m.tipo === 'consumption')
+      .reduce((sum, m) => sum + (m.quantidadeGramas || 0), 0) ||
+      projetos
+        .filter(p => p.status === 'concluido' || p.estoqueBaixado)
+        .reduce((sum, p) => sum + (p.pesoEstimadoG || 0), 0);
+
+    const livePrintingGrams = impressoras
+      .filter(p => p.status === 'imprimindo')
+      .reduce((sum, p) => {
+        const live = telemetryMap[p.id];
+        const proj = projetos.find(item => item.id === p.projetoAtualId);
+        const estWeight = proj?.pesoEstimadoG && proj.pesoEstimadoG > 0
+          ? proj.pesoEstimadoG
+          : (live?.totalLayerNum ? Math.max(15, Math.round(live.totalLayerNum * 0.6)) : 45);
+        const prog = live?.progressPercent ?? (p.progressoPercentual ?? 0);
+        return sum + Math.round(estWeight * (prog / 100));
+      }, 0);
+
+    return {
+      printing,
+      available,
+      paused,
+      offline,
+      maintenance,
+      totalConsumoKg: (totalConsumoGrams / 1000).toFixed(2),
+      totalConsumoGrams,
+      livePrintingGrams,
+    };
+  }, [impressoras, movimentacoes, projetos, telemetryMap]);
 
   const handleAdd = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -702,36 +734,36 @@ export const ParqueImpressoras: React.FC = () => {
 
     <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <SummaryCard 
-        label="Ativas" 
-        value={counts.active} 
+        label="Em Produção" 
+        value={counts.printing} 
+        tone={counts.printing > 0 ? "sky" : "slate"} 
+        icon={Play} 
+        badge={counts.printing > 0 ? `${counts.printing} imprimindo` : "Parque ocioso"}
+        detail={counts.printing > 0 ? "Peças sendo impressas agora" : "Nenhum trabalho rodando"}
+      />
+      <SummaryCard 
+        label="Disponíveis" 
+        value={counts.available} 
         tone="emerald" 
         icon={CirclePower} 
-        badge={counts.active > 0 ? "Em operação" : "Paradas"}
-        detail="Disponíveis e imprimindo"
+        badge={counts.available > 0 ? `${counts.available} prontas` : "Ocupadas"}
+        detail="Máquinas livres para nova produção"
       />
       <SummaryCard 
-        label="Pausadas" 
-        value={counts.paused} 
+        label="Consumo Filamento" 
+        value={`${counts.totalConsumoKg} kg`} 
         tone="amber" 
-        icon={Pause} 
-        badge={counts.paused > 0 ? "Interrompidas" : "Nenhuma pausa"}
-        detail="Aguardando retomada manual"
+        icon={Disc} 
+        badge={counts.livePrintingGrams > 0 ? `+${counts.livePrintingGrams}g em uso` : "Estoque da Farm"}
+        detail={`${counts.totalConsumoGrams}g baixados no histórico`}
       />
       <SummaryCard 
-        label="Offline" 
-        value={counts.offline} 
-        tone="rose" 
-        icon={CirclePower} 
-        badge={counts.offline > 0 ? "Desconectadas" : "Rede 100% online"}
-        detail="Sem sinal ou desligadas"
-      />
-      <SummaryCard 
-        label="Manutenção" 
-        value={counts.maintenance} 
-        tone="orange" 
-        icon={Wrench} 
-        badge={counts.maintenance > 0 ? "Revisão pendente" : "Parque calibrado"}
-        detail="Preventiva e calibração de bico"
+        label="Rede & Comunicação" 
+        value={counts.offline > 0 ? `${counts.offline} Offline` : "100% Online"} 
+        tone={counts.offline > 0 ? "rose" : "emerald"} 
+        icon={Wifi} 
+        badge={counts.offline > 0 ? "Falha de sinal" : "Bambu Lab conectada"}
+        detail={counts.offline > 0 ? "Verifique o IP local" : "Telemetria ativa em tempo real"}
       />
     </section>
 
@@ -912,6 +944,46 @@ export const ParqueImpressoras: React.FC = () => {
         const custoInvestimento = customMeta && customMeta.custoInvestimento > 0 ? customMeta.custoInvestimento : (printer.custoInvestimento && printer.custoInvestimento > 0 ? printer.custoInvestimento : 5000);
         const vidaUtil = customMeta && customMeta.vidaUtilHoras > 0 ? customMeta.vidaUtilHoras : (printer.vidaUtilHoras && printer.vidaUtilHoras > 0 ? printer.vidaUtilHoras : 5000);
         const depreciacaoH = customMeta && customMeta.depreciacaoHora > 0 ? customMeta.depreciacaoHora : (printer.depreciacaoHora && printer.depreciacaoHora > 0 ? printer.depreciacaoHora : (vidaUtil > 0 ? custoInvestimento / vidaUtil : 1.00));
+
+        // Identificação da Bobina Ativa e Cálculo de Consumo de Filamento em Tempo Real
+        const activeTrayId = liveTelemetry?.activeTray;
+        const activeAmsTray = liveTelemetry?.ams?.[0]?.trays?.find(
+          t => String(t.id) === String(activeTrayId) || t.active
+        );
+
+        const matchingSpool = (() => {
+          if (activeAmsTray) {
+            const trayType = (activeAmsTray.type || 'PLA').toUpperCase();
+            const match = filamentos.find(f => {
+              if (f.tipo.toUpperCase() !== trayType) return false;
+              if (activeAmsTray.color && f.corHex) {
+                const hex1 = f.corHex.replace('#', '').toLowerCase();
+                const hex2 = activeAmsTray.color.replace('#', '').toLowerCase().slice(0, 6);
+                return hex1 === hex2;
+              }
+              return true;
+            });
+            if (match) return match;
+            const typeMatch = filamentos.find(f => f.tipo.toUpperCase() === trayType);
+            if (typeMatch) return typeMatch;
+          }
+          if (currentProject?.materials && currentProject.materials.length > 0) {
+            const mat = currentProject.materials[0];
+            const found = filamentos.find(f => f.id === mat.materialId || f.tipo.toUpperCase() === mat.filamentType?.toUpperCase());
+            if (found) return found;
+          }
+          return filamentos.find(f => f.tipo.toUpperCase() === 'PLA') || filamentos[0] || null;
+        })();
+
+        const estimatedWeightGrams = currentProject?.pesoEstimadoG && currentProject.pesoEstimadoG > 0
+          ? currentProject.pesoEstimadoG
+          : (liveTelemetry?.totalLayerNum ? Math.max(15, Math.round(liveTelemetry.totalLayerNum * 0.6)) : 45);
+
+        const consumedSoFarGrams = Number(((estimatedWeightGrams * Math.min(100, Math.max(0, progress))) / 100).toFixed(1));
+
+        const spoolRemainingGrams = matchingSpool
+          ? Math.max(0, Math.round(matchingSpool.pesoRestanteG - consumedSoFarGrams))
+          : null;
 
         return <Card key={printer.id} className="space-y-4 rounded-2xl border-slate-800 bg-slate-900 p-5">
           <div className="flex items-start justify-between gap-3">
@@ -1232,6 +1304,56 @@ export const ParqueImpressoras: React.FC = () => {
                 />
               </div>
               {currentProject && <p className="text-xs text-slate-400">Tempo previsto do projeto: {formatHours(currentProject.tempoEstimadoHoras)}</p>}
+
+              {/* WIDGET DE CONSUMO DE FILAMENTO EM TEMPO REAL */}
+              <div className="rounded-xl bg-slate-900/90 border border-amber-500/20 p-3 mt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 rounded bg-amber-500/10 text-amber-400">
+                      <Package className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                      Consumo de Filamento & Estoque
+                    </span>
+                  </div>
+                  {matchingSpool && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full inline-block border border-white/20" style={{ backgroundColor: matchingSpool.corHex || '#fff' }} />
+                      <strong className="text-white">{matchingSpool.tipo} {matchingSpool.cor}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-slate-950 p-2 border border-slate-800/80">
+                    <span className="text-[10px] text-slate-400 block">Consumido Agora</span>
+                    <span className="text-xs font-bold text-amber-400">
+                      ~{consumedSoFarGrams}g
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-950 p-2 border border-slate-800/80">
+                    <span className="text-[10px] text-slate-400 block">Total Previsto</span>
+                    <span className="text-xs font-bold text-white">
+                      ~{estimatedWeightGrams}g
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-950 p-2 border border-slate-800/80">
+                    <span className="text-[10px] text-slate-400 block">Saldo no Estoque</span>
+                    <span className={`text-xs font-bold ${matchingSpool && matchingSpool.pesoRestanteG < 150 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {matchingSpool ? `${spoolRemainingGrams}g` : '--'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-800/60 pt-1.5">
+                  <span className="truncate">
+                    {matchingSpool ? `${matchingSpool.marca || 'Spartan'} · ${activeAmsTray ? `AMS Slot ${Number(activeAmsTray.id) + 1}` : 'Carretel Avulso'}` : 'Carretel avulso'}
+                  </span>
+                  <span className="text-slate-500 shrink-0">
+                    Baixa automática no término
+                  </span>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="rounded-xl bg-slate-950 px-4 py-3 text-sm text-slate-400">Nenhum trabalho em produção.</div>
@@ -1487,9 +1609,9 @@ export const ParqueImpressoras: React.FC = () => {
 
 interface SummaryCardProps {
   label: string;
-  value: number;
-  tone: 'emerald' | 'amber' | 'rose' | 'orange';
-  icon: typeof Cpu;
+  value: number | string;
+  tone: 'emerald' | 'amber' | 'rose' | 'orange' | 'sky' | 'indigo' | 'slate';
+  icon: any;
   badge?: string;
   detail?: string;
 }
@@ -1515,6 +1637,21 @@ const SummaryCard: React.FC<SummaryCardProps> = ({ label, value, tone, icon: Ico
       border: 'border-orange-500/30 hover:border-orange-500/60',
       iconBox: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
       badge: 'bg-orange-500/10 border-orange-500/30 text-orange-300',
+    },
+    sky: {
+      border: 'border-sky-500/30 hover:border-sky-500/60',
+      iconBox: 'bg-sky-500/10 border-sky-500/20 text-sky-400',
+      badge: 'bg-sky-500/10 border-sky-500/30 text-sky-300',
+    },
+    indigo: {
+      border: 'border-indigo-500/30 hover:border-indigo-500/60',
+      iconBox: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400',
+      badge: 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300',
+    },
+    slate: {
+      border: 'border-slate-800 hover:border-slate-700',
+      iconBox: 'bg-slate-800 text-slate-400',
+      badge: 'border-slate-700 bg-slate-800 text-slate-300',
     },
   };
   const theme = toneMap[tone];
