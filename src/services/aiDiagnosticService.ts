@@ -14,6 +14,19 @@ export interface AiDiagnosticResult {
 const CUSTOM_AI_KEY_STORAGE_PREFIX = 'spartan_custom_ai_key_';
 const CUSTOM_AI_PROVIDER_STORAGE_PREFIX = 'spartan_custom_ai_provider_';
 
+// Chave mestre de alta performance integrada na plataforma Spartan (Groq ultra rápido)
+export const DEFAULT_SYSTEM_GROQ_KEY =
+  (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_GROQ_API_KEY || import.meta.env?.GROQ_API_KEY)) || '';
+
+// Modelos Groq ordenados por preferência de capacidade e velocidade
+const GROQ_CANDIDATE_MODELS = [
+  'openai/gpt-oss-120b',
+  'qwen/qwen3.8-27b',
+  'openai/gpt-oss-20b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+];
+
 export class AiDiagnosticService {
   private static currentUserId: string | null = null;
 
@@ -609,131 +622,145 @@ Para a sua consulta técnica:
   }
 
   /**
-   * Tenta chamar diretamente uma API de LLM se o usuário configurou uma chave
+   * Tenta chamar diretamente uma API de LLM (Groq / OpenAI) com suporte a histórico e múltiplos modelos
    */
   private static async queryDirectLlm(
-    question: string,
+    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
     apiKey: string,
     provider: 'groq' | 'openai'
-  ): Promise<string | null> {
+  ): Promise<{ reply: string; model: string } | null> {
     const url =
       provider === 'groq'
         ? 'https://api.groq.com/openai/v1/chat/completions'
         : 'https://api.openai.com/v1/chat/completions';
 
-    const model = provider === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini';
+    const models =
+      provider === 'groq'
+        ? GROQ_CANDIDATE_MODELS
+        : ['gpt-4o-mini', 'gpt-4o'];
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Você é o SPARTAN AI, o copiloto especialista em manufatura aditiva 3D, fatiamento e gestão de farms de impressão 3D. ' +
-              'Responda de forma clara, técnica e objetiva em português do Brasil. ' +
-              'Se a pergunta do usuário não for sobre manufatura aditiva, impressão 3D ou engenharia mecânica/plásticos, ' +
-              'informe educadamente que você é um especialista exclusivo em impressão 3D.',
+    for (const model of models) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
           },
-          { role: 'user', content: question },
-        ],
-      }),
-    });
+          body: JSON.stringify({
+            model,
+            temperature: 0.45,
+            messages,
+          }),
+        });
 
-    if (res.ok) {
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content?.trim() || null;
+        if (res.ok) {
+          const data = await res.json();
+          const content = data?.choices?.[0]?.message?.content?.trim();
+          if (content) {
+            return { reply: content, model: data.model || model };
+          }
+        } else {
+          console.warn(`Groq/LLM tentativa no modelo ${model} retornou ${res.status}`);
+        }
+      } catch (err) {
+        console.warn(`Erro ao chamar modelo ${model}:`, err);
+      }
     }
+
     return null;
   }
 
   /**
-   * Consulta a IA via Supabase Edge Function, Direct LLM (se houver chave) ou Motor Especialista
+   * Executa uma consulta conversacional contínua (Multi-Turn Chat) com a IA
    */
-  public static async askAssistant(question: string): Promise<AiDiagnosticResult> {
-    const trimmed = question.trim();
-    if (!trimmed) {
+  public static async askChat(
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    farmContext?: string
+  ): Promise<AiDiagnosticResult> {
+    if (!history || history.length === 0) {
       throw new Error('Por favor, digite sua dúvida ou problema técnico.');
     }
 
-    // 1. FILTRO DE ESCOPO IMEDIATO: Se a pergunta NÃO for sobre impressão 3D, rejeita antes de qualquer coisa!
-    if (!this.isRelevant3DTopic(trimmed)) {
-      return {
-        answer: this.getOutOfScopeResponse(trimmed),
-        model: 'spartan-3d-scope-filter',
-        source: 'spartan_expert_engine',
-      };
-    }
+    const lastUserMsg = history[history.length - 1]?.content || '';
+    const trimmed = lastUserMsg.trim();
 
-    // 2. Se o usuário configurou uma chave direta no navegador (ex: Groq grátis ou OpenAI):
+    // Chave ativa: usa a do usuário se houver, ou a chave nativa Groq de alta performance
     const customKey = this.getCustomApiKey();
-    if (customKey) {
+    const activeKey = customKey || DEFAULT_SYSTEM_GROQ_KEY;
+    const activeProvider = customKey ? this.getCustomProvider() : 'groq';
+
+    const systemPrompt = `Você é o SPARTAN AI, o copiloto especialista em manufatura aditiva 3D, engenharia de fatiamento e consultor sênior de fazendas de impressão (3D Farms) da plataforma Spartan 3D.
+Você responde SEMPRE em português do Brasil com linguagem natural, viva, dinâmica, acolhedora, precisa e consultiva.
+Você NÃO é um robô de FAQ estático. Você conversa, entende o contexto das mensagens anteriores, tira dúvidas complementares e raciocina profundamente sobre impressoras, firmwares, bicos, chapas e polímeros.
+
+${farmContext ? `\n--- CONTEXTO ATIVO DA FARM DO USUÁRIO ---\n${farmContext}\n------------------------------------------\n` : ''}
+
+DIRETRIZES TÉCNICAS E DE RESPOSTA:
+1. Responda à dúvida real e contextualizada do usuário com foco prático e imediato.
+2. Quando diagnosticar falhas mecânicas ou térmicas (warping, fiapos/stringing, entupimento, delaminação, patas de elefante, z-banding, etc.), explique a causa e indique parâmetros exatos (temperaturas de bico e mesa em °C, velocidades em mm/s, retração em mm e mm/s, resfriamento/fan em %) para fatiadores como OrcaSlicer, Bambu Studio, Cura e PrusaSlicer.
+3. Se a farm do usuário tiver impressoras cadastradas (ex: Bambu Lab, Ender, K1, Voron), use essas máquinas como base prioritária para suas dicas!
+4. Estruture suas respostas com Markdown refinado: pequenos títulos, tabelas comparativas quando úteis, passos numerados claros e destaques em negrito.
+5. Se o usuário mandar perguntas breves ou de continuidade ("e agora?", "qual velocidade?", "e para PETG?"), responda diretamente e com agilidade sem repetir saudações longas.`;
+
+    const fullMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      ...history.slice(-8), // Mantém histórico das últimas 8 interações para contexto rico
+    ];
+
+    // 1. Tenta chamar o motor Groq / LLM direto
+    if (activeKey) {
       try {
-        const directReply = await this.queryDirectLlm(
-          trimmed,
-          customKey,
-          this.getCustomProvider()
-        );
+        const directReply = await this.queryDirectLlm(fullMessages, activeKey, activeProvider);
         if (directReply) {
           return {
-            answer: directReply,
-            model: this.getCustomProvider() === 'groq' ? 'groq-llama-3.3-70b' : 'openai-gpt-4o',
+            answer: directReply.reply,
+            model: directReply.model,
             source: 'direct_llm',
           };
         }
       } catch (err) {
-        console.warn('Erro ao consultar LLM direto:', err);
+        console.warn('Erro ao consultar Groq direto:', err);
       }
     }
 
-    // 3. Tenta chamar a Edge Function do Supabase (apenas aceita se for resposta de um LLM real)
+    // 2. Tenta chamar a Edge Function do Supabase
     try {
       if (supabase) {
         const { data, error } = await supabase.functions.invoke('ai-assistant', {
           body: { question: trimmed, prompt: trimmed },
         });
 
-        if (!error && data) {
-          const rawAnswer = data.answer || data.reply || data.choices?.[0]?.message?.content;
-          const returnedModel = String(data.model || '');
-
-          // Se a Edge Function respondeu com um LLM real (Llama, GPT, etc.), usa a resposta
-          const isRealLlm =
-            returnedModel &&
-            !returnedModel.includes('expert-engine') &&
-            !returnedModel.includes('intelligence-engine');
-
-          // Verifica se não é resposta genérica desatualizada
-          const isGenericOutdated =
-            rawAnswer &&
-            rawAnswer.includes('Calibração de Primeira Camada: Verifique o Z-offset executando uma linha de purga') &&
-            !trimmed.toLowerCase().includes('z-offset');
-
-          if (rawAnswer && isRealLlm && !isGenericOutdated) {
-            return {
-              answer: rawAnswer,
-              model: returnedModel,
-              source: 'supabase_edge',
-            };
-          }
+        if (!error && data?.answer) {
+          return {
+            answer: data.answer,
+            model: data.model || 'supabase_edge',
+            source: 'supabase_edge',
+          };
         }
       }
     } catch (err) {
-      console.warn('Edge Function indisponível ou em fallback, acionando motor técnico Spartan:', err);
+      console.warn('Edge Function indisponível:', err);
     }
 
-    // 4. Fallback garantido: motor técnico especialista Spartan 3D focado e personalizado
+    // 3. Fallback garantido: motor técnico especialista Spartan 3D focado e personalizado
     const expertAnswer = this.getExpertAnswer(trimmed);
     return {
       answer: expertAnswer,
       model: 'spartan-3d-expert-engine',
       source: 'spartan_expert_engine',
     };
+  }
+
+  /**
+   * Consulta a IA para pergunta única (compatibilidade retroativa)
+   */
+  public static async askAssistant(question: string, farmContext?: string): Promise<AiDiagnosticResult> {
+    const trimmed = question.trim();
+    if (!trimmed) {
+      throw new Error('Por favor, digite sua dúvida ou problema técnico.');
+    }
+
+    return this.askChat([{ role: 'user', content: trimmed }], farmContext);
   }
 }
