@@ -99,30 +99,49 @@ export const ParqueImpressoras: React.FC = () => {
       .map(p => {
         const custom = customInvestments[p.id];
         const conn = customConnections[p.id];
-        const activeProjForPrinter =
-          projetos.find(
-            proj =>
-              proj.status === 'em_impressao' &&
-              (proj.id === p.projetoAtualId || proj.impressoraId === p.id)
-          ) ||
-          (p.status === 'imprimindo' || p.status === 'pausada'
-            ? projetos.find(proj => proj.status === 'em_impressao') ||
-              projetos.find(proj => proj.impressoraId === p.id && proj.status !== 'concluido' && proj.status !== 'cancelado')
-            : undefined);
+        const isBambu = (conn?.tipoConexao || p.tipoConexao) === 'bambu_lab';
+        const liveT = telemetryMap[p.id];
+        const liveGState = isBambu && liveT?.gcodeState ? liveT.gcodeState.toUpperCase() : null;
 
-        const effectiveStatus: Impressora3D['status'] =
-          activeProjForPrinter && p.status === 'disponivel' ? 'imprimindo' : p.status;
+        const isPhysicallyIdle = liveGState === 'IDLE' || liveGState === 'FAILED' || liveGState === 'FINISH';
+        const isPhysicallyPrinting = liveGState === 'RUNNING' || liveGState === 'PREPARE';
+        const isPhysicallyPaused = liveGState === 'PAUSE';
 
-        const resolvedProjectId =
-          p.projetoAtualId ||
-          activeProjForPrinter?.id ||
-          (effectiveStatus === 'imprimindo' || effectiveStatus === 'pausada' ? `active_${p.id}` : undefined);
+        const activeProjForPrinter = isPhysicallyIdle
+          ? undefined
+          : (projetos.find(
+              proj =>
+                proj.status === 'em_impressao' &&
+                (proj.id === p.projetoAtualId || proj.impressoraId === p.id)
+            ) ||
+            (p.status === 'imprimindo' || p.status === 'pausada'
+              ? projetos.find(proj => proj.status === 'em_impressao' && proj.impressoraId === p.id)
+              : undefined));
+
+        let effectiveStatus: Impressora3D['status'] = p.status;
+        if (isPhysicallyIdle) {
+          effectiveStatus = p.status === 'manutencao' ? 'manutencao' : 'disponivel';
+        } else if (isPhysicallyPrinting) {
+          effectiveStatus = 'imprimindo';
+        } else if (isPhysicallyPaused) {
+          effectiveStatus = 'pausada';
+        } else if (activeProjForPrinter && p.status === 'disponivel') {
+          effectiveStatus = 'imprimindo';
+        }
+
+        const resolvedProjectId = isPhysicallyIdle
+          ? undefined
+          : (activeProjForPrinter?.id || p.projetoAtualId || ((effectiveStatus === 'imprimindo' || effectiveStatus === 'pausada') ? `bambu_${p.id}` : undefined));
+
+        const resolvedProjectName = isPhysicallyIdle
+          ? undefined
+          : (liveT?.subtaskName || activeProjForPrinter?.nomePeca || p.projetoAtual || (resolvedProjectId ? 'Projeto em produção' : undefined));
 
         const basePrinter: Impressora3D = {
           ...p,
           status: effectiveStatus,
           projetoAtualId: resolvedProjectId,
-          projetoAtual: p.projetoAtual || activeProjForPrinter?.nomePeca || (resolvedProjectId ? 'Projeto em produção' : undefined),
+          projetoAtual: resolvedProjectName,
           tipoConexao: conn?.tipoConexao || p.tipoConexao || 'manual',
           ipRede: conn?.ipRede || p.ipRede,
           serialNumber: conn?.serialNumber || p.serialNumber,
@@ -139,7 +158,7 @@ export const ParqueImpressoras: React.FC = () => {
         }
         return basePrinter;
       });
-  }, [rawImpressoras, deletedPrinterIds, customInvestments, customConnections, projetos]);
+  }, [rawImpressoras, deletedPrinterIds, customInvestments, customConnections, projetos, telemetryMap]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [tipoConexao, setTipoConexao] = useState<Impressora3D['tipoConexao']>('manual');
@@ -229,7 +248,7 @@ export const ParqueImpressoras: React.FC = () => {
     if (completingPrintersRef.current.has(printer.id)) return;
     completingPrintersRef.current.add(printer.id);
 
-    const rawProjectId = printer.projetoAtualId && !printer.projetoAtualId.startsWith('active_')
+    const rawProjectId = printer.projetoAtualId && !printer.projetoAtualId.startsWith('active_') && !printer.projetoAtualId.startsWith('bambu_')
       ? printer.projetoAtualId
       : projetos.find(proj => (proj.impressoraId === printer.id || !proj.impressoraId) && proj.status === 'em_impressao')?.id;
     const currentProject = projetos.find(proj => proj.id === rawProjectId);
@@ -273,18 +292,19 @@ export const ParqueImpressoras: React.FC = () => {
       } else {
         // Impressão direta do Bambu Studio (via AMS Lite ou carretel avulso)
         const activeTrayId = telemetryPayload?.activeTray;
-        const activeTray = telemetryPayload?.ams?.[0]?.trays?.find(t => String(t.id) === String(activeTrayId));
+        const activeTray = telemetryPayload?.ams?.[0]?.trays?.find(t => String(t.id) === String(activeTrayId) || t.active);
         
         const matchingSpool = activeTray
           ? filamentos.find(f => 
               f.tipo.toUpperCase() === (activeTray.type || 'PLA').toUpperCase() && 
-              (activeTray.color ? f.corHex?.toLowerCase() === activeTray.color.toLowerCase() : true)
+              (activeTray.color ? f.corHex?.toLowerCase().replace('#', '') === activeTray.color.toLowerCase().replace('#', '').slice(0, 6) : true)
             ) || filamentos.find(f => f.tipo.toUpperCase() === (activeTray.type || 'PLA').toUpperCase())
           : filamentos[0];
 
         if (matchingSpool) {
-          // Consumo padrão de 50g para peças concluídas diretamente do fatiador
-          const autoWeight = 50; 
+          const autoWeight = currentProject?.pesoEstimadoG && currentProject.pesoEstimadoG > 0
+            ? currentProject.pesoEstimadoG
+            : (telemetryPayload?.totalLayerNum ? Math.max(15, Math.round(telemetryPayload.totalLayerNum * 0.6)) : 45);
           consumirFilamento(matchingSpool.id, autoWeight);
           stockDeductedGrams = autoWeight;
           stockFilamentLabel = `${matchingSpool.tipo} ${matchingSpool.cor}`;
@@ -292,7 +312,8 @@ export const ParqueImpressoras: React.FC = () => {
       }
 
       // 3. Dá baixa no projeto e libera a impressora para 'disponivel'
-      if (rawProjectId) {
+      lastSyncedStatusRef.current[printer.id] = 'disponivel';
+      if (rawProjectId && !rawProjectId.startsWith('bambu_') && !rawProjectId.startsWith('active_')) {
         await updateProjetoStatus(rawProjectId, 'concluido');
       } else {
         updateImpressoraStatus(printer.id, 'disponivel');
@@ -399,24 +420,24 @@ export const ParqueImpressoras: React.FC = () => {
             setTelemetryMap(prev => ({ ...prev, [printer.id]: telemetry }));
             setPrinterOnlineMap(prev => ({ ...prev, [printer.id]: true }));
 
-            // Sincroniza progresso real da máquina
-            if (telemetry.progressPercent !== null && telemetry.progressPercent >= 0) {
-              setProgressDraft(prev => ({ ...prev, [printer.id]: telemetry.progressPercent! }));
-            }
-
             // ATUALIZAÇÃO DO STATUS DA IMPRESSORA CONFORME A CONEXÃO E O ESTADO REAL (GCODE_STATE):
             const gState = (telemetry.gcodeState || '').toUpperCase();
+
+            // Sincroniza progresso real da máquina apenas quando estiver em execução
+            if (telemetry.progressPercent !== null && telemetry.progressPercent >= 0 && (gState === 'RUNNING' || gState === 'PREPARE' || gState === 'PAUSE')) {
+              setProgressDraft(prev => ({ ...prev, [printer.id]: telemetry.progressPercent! }));
+            }
 
             let targetStatus: Impressora3D['status'] | null = null;
             if (gState === 'RUNNING' || gState === 'PREPARE') {
               targetStatus = 'imprimindo';
             } else if (gState === 'PAUSE') {
               targetStatus = 'pausada';
-            } else if (gState === 'FINISH') {
-              // Finalizou o trabalho: conclui e dá baixa no estoque
-              void handleConcluirTrabalho(printer, true, telemetry);
-            } else if (gState === 'IDLE' || gState === 'FAILED') {
-              if (printer.status === 'desconectada') {
+            } else if (gState === 'FINISH' || gState === 'IDLE' || gState === 'FAILED') {
+              if (printer.status === 'imprimindo' || printer.status === 'pausada' || printer.projetoAtualId) {
+                // Finalizou, cancelou ou terminou o trabalho: conclui e dá baixa no estoque
+                void handleConcluirTrabalho(printer, true, telemetry);
+              } else if (printer.status !== 'disponivel' && printer.status !== 'manutencao') {
                 targetStatus = 'disponivel';
               }
             }
@@ -1356,7 +1377,16 @@ export const ParqueImpressoras: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="rounded-xl bg-slate-950 px-4 py-3 text-sm text-slate-400">Nenhum trabalho em produção.</div>
+            <div className="rounded-xl bg-slate-950 px-4 py-3 text-sm text-slate-400">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span>Nenhum trabalho em produção. Máquina livre.</span>
+                {liveTelemetry?.subtaskName && (
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    Último arquivo: <strong className="text-slate-400">{liveTelemetry.subtaskName}</strong>
+                  </span>
+                )}
+              </div>
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-950 p-3"><p className="text-[11px] text-slate-500">Horas de impressão</p><p className="mt-1 font-semibold text-white">{formatSecondsToTime(effectiveUsageSeconds)}</p><p className="text-[10px] text-slate-500">{elapsedPrintSeconds > 0 ? 'Em produção + concluídos' : 'Estimadas em projetos concluídos'}</p></div><div className={`rounded-xl p-3 ${serviceDue ? 'bg-orange-500/10' : serviceSoon ? 'bg-amber-500/10' : 'bg-slate-950'}`}><p className="text-[11px] text-slate-500">Próxima manutenção</p><p className={`mt-1 font-semibold ${serviceDue ? 'text-orange-300' : serviceSoon ? 'text-amber-300' : 'text-white'}`}>{serviceDue ? 'Manutenção necessária' : `Em ${formatSecondsToTime(effectiveRemainingServiceSecs)}`}</p><p className="text-[10px] text-slate-500">Intervalo: {printer.intervaloManutencaoHoras || 100} h · Última: {lastMaintenance ? new Date(lastMaintenance.data).toLocaleDateString('pt-BR') : 'sem registro'}</p></div></div>
