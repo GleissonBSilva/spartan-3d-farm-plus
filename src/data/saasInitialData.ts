@@ -37,6 +37,7 @@ export const INITIAL_PLANS: Plan[] = [
       'Até 50 projetos simultâneos',
       'Até 5 impressoras 3D na farm',
       'Gestão de até 50 carretéis com baixa automática',
+      'Conselheiro Inteligente AI (O que Imprimir com Estoque & Lucro)',
       'Simulador de variações (1 a 4 cores)',
       'Alertas de manutenção preventiva de bicos',
       'Envio de orçamentos instantâneos no WhatsApp',
@@ -58,6 +59,7 @@ export const INITIAL_PLANS: Plan[] = [
     features: [
       'Projetos, Impressoras e Filamentos ILIMITADOS',
       'Multi-usuários (Até 10 membros da equipe)',
+      'Conselheiro Inteligente AI (O que Imprimir com Estoque & Lucro)',
       'Gestão avançada de perdas e taxas de falha',
       'Integração de telemetria OctoPrint / Klipper',
       'Suporte técnico e consultoria 3D 1 a 1 via WhatsApp',

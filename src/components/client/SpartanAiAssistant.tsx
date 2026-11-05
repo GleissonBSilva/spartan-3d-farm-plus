@@ -1,21 +1,29 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Bot, Thermometer, Copy, Check, RotateCcw, Loader2, Settings2, Key, X, TrendingUp, Layers } from 'lucide-react';
+import { Sparkles, Bot, Thermometer, Copy, Check, RotateCcw, Loader2, Settings2, Key, X, TrendingUp, Layers, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { AiDiagnosticService } from '@/services/aiDiagnosticService';
 import { useAuth } from '@/context/AuthContext';
+import { useSaaSData } from '@/context/SaaSDataContext';
+import { FeatureGatingService } from '@/services/featureGatingService';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SpartanAiFarmStrategy } from './SpartanAiFarmStrategy';
 
 export const SpartanAiAssistant: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { currentPlan } = useSaaSData();
   const [mainTab, setMainTab] = useState<'estrategia' | 'diagnostico'>('estrategia');
+
+  // Controle de Acesso por Plano: Conselheiro Inteligente exclusivo PRO em diante
+  const isProOrHigher = FeatureGatingService.canAccessAiFarmAdvisor(currentPlan, user?.role);
 
   // Diagnostic states
   const [pergunta, setPergunta] = useState('');
@@ -114,6 +122,11 @@ export const SpartanAiAssistant: React.FC = () => {
           >
             <TrendingUp className="w-4 h-4" />
             <span>🎯 O que Imprimir & Estratégia de Lucro</span>
+            {!isProOrHigher && (
+              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[9px] py-0 px-1.5 font-black ml-0.5">
+                👑 PRO
+              </Badge>
+            )}
           </button>
 
           <button
@@ -150,7 +163,7 @@ export const SpartanAiAssistant: React.FC = () => {
           ) : (
             <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 text-xs flex items-center gap-1.5 py-1 px-3">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              Sincronizado com Estoque & Farm
+              {isProOrHigher ? 'Spartan PRO · Inteligência Ativa' : 'Recurso Avançado PRO'}
             </Badge>
           )}
         </div>
@@ -158,7 +171,84 @@ export const SpartanAiAssistant: React.FC = () => {
 
       {/* RENDERIZAÇÃO DA SUB-ABA ATIVA */}
       {mainTab === 'estrategia' ? (
-        <SpartanAiFarmStrategy />
+        isProOrHigher ? (
+          <SpartanAiFarmStrategy />
+        ) : (
+          <Card className="bg-slate-900 border-slate-800 rounded-2xl p-6 sm:p-10 text-center max-w-2xl mx-auto shadow-2xl space-y-6">
+            <div className="p-3.5 rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 text-white shadow-xl mx-auto w-fit">
+              <Sparkles className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-400">
+                👑 Exclusivo para Planos PRO & Business
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-white">
+                Conselheiro Inteligente · O que Imprimir & Estratégia de Lucro
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto leading-relaxed">
+                Otimize sua farm de impressão 3D com inteligência artificial: cruze seu estoque real com seus projetos, elimine sobras e maximize o faturamento e o lucro líquido.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left pt-2">
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <span className="text-emerald-400">💰</span> Maximização de Lucro
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Cálculo automático de lotes lucrativos por carretel e métricas de lucro por hora de máquina.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <span className="text-teal-400">♻️</span> Zero Desperdício
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Aproveitamento de sobras de carretel (&lt;220g) em brindes e peças de giro rápido.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <span className="text-cyan-400">⚡</span> Validação de Orçamentos
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Verificação em tempo real de matéria-prima para aprovar e rodar orçamentos na hora.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-white">
+                  <span className="text-indigo-400">🚀</span> 1 Clique para Produção
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  Dispare lotes diretamente para impressoras livres da farm ou pré-carregue na Calculadora 3D.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button
+                size="lg"
+                onClick={() => navigate('/cliente/planos')}
+                className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-indigo-600 hover:opacity-95 text-white font-black text-xs sm:text-sm rounded-xl h-11 px-6 shadow-xl"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Fazer Upgrade para Spartan PRO (R$ 99/mês)
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => setMainTab('diagnostico')}
+                className="w-full sm:w-auto border-slate-700 bg-slate-950 text-slate-300 hover:text-white text-xs rounded-xl h-11 px-5"
+              >
+                Ir para Diagnóstico Técnico 3D
+              </Button>
+            </div>
+          </Card>
+        )
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 bg-slate-900 border-slate-800 rounded-2xl">

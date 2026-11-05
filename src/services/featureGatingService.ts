@@ -72,4 +72,14 @@ export class FeatureGatingService {
       status,
     };
   }
+
+  static canAccessAiFarmAdvisor(plan?: Plan, role?: string): boolean {
+    if (role === 'admin') return true;
+    if (!plan) return false;
+    // O Conselheiro Inteligente ("O que Imprimir & Estratégia de Lucro") é exclusivo para PRO em diante
+    if (plan.id === 'plan_starter' || (plan.priceMonthly && plan.priceMonthly < 99)) {
+      return false;
+    }
+    return true;
+  }
 }
