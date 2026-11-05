@@ -56,37 +56,164 @@ const ProjectCard: React.FC<{
   const canStart = project.status === 'aprovado' && Boolean(project.impressoraId) && Boolean(printerCanStart);
   const deadline = project.dataEntrega ? new Date(`${project.dataEntrega}T00:00:00`) : undefined;
   const late = Boolean(deadline && deadline < new Date(new Date().toDateString()) && !['concluido', 'cancelado'].includes(project.status));
-  return <Card className="overflow-hidden rounded-2xl border-slate-800 bg-slate-900">
-    <button type="button" onClick={() => onView(project)} aria-label={`Abrir projeto ${project.nomePeca}`} className="group relative flex h-48 w-full items-center justify-center overflow-hidden bg-slate-950">
-      {image ? <img src={image} alt={`Imagem de ${project.nomePeca}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" /> : <div className="flex flex-col items-center gap-2 text-slate-500"><Box className="h-9 w-9" /><span className="text-xs">Imagem ou modelo 3D não anexado</span></div>}
-      <Badge variant="outline" className={`absolute left-3 top-3 backdrop-blur ${statusClass[project.status]}`}>{statusLabel[project.status]}</Badge>
-    </button>
-    <div className="space-y-4 p-4">
-      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-white">{project.nomePeca}</h3><p className="mt-1 text-xs text-slate-400">Projeto #{reference} · Cliente: {project.clienteNome || 'Não informado'}</p></div><details className="relative shrink-0"><summary aria-label="Mais ações" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"><MoreHorizontal className="h-4 w-4" /></summary><div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-slate-700 bg-slate-950 p-1 shadow-xl"><button onClick={() => onEdit(project)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"><Pencil className="h-3.5 w-3.5" />Editar projeto</button><button onClick={() => onPdf(project)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"><FileText className="h-3.5 w-3.5" />Gerar proposta</button><button onClick={() => onDelete(project)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-rose-300 hover:bg-rose-500/10"><Trash2 className="h-3.5 w-3.5" />Excluir projeto</button></div></details></div>
-      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-300">
-        <span>{project.quantidade || 1} {project.quantidade === 1 ? 'peça' : 'peças'}</span>
-        <span><Weight className="mr-1 inline h-3.5 w-3.5 text-slate-500" />{project.pesoEstimadoG} g</span>
-        <span><Clock3 className="mr-1 inline h-3.5 w-3.5 text-slate-500" />{formatHours(project.tempoEstimadoHoras)}</span>
-        <span>{materials.length ? materials.map(item => `${item.filamentType} ${item.color}`).join(' + ') : 'Material não informado'}</span>
-        {project.formaPagamento && (
-          <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-emerald-400 border border-slate-700">
-            {project.formaPagamento === 'pix' && '⚡ Pix'}
-            {project.formaPagamento === 'credito' && `💳 Crédito ${project.parcelasCartao && project.parcelasCartao > 1 ? `${project.parcelasCartao}x` : '1x'}`}
-            {project.formaPagamento === 'debito' && '💳 Débito'}
-            {project.formaPagamento === 'dinheiro' && '💵 Dinheiro'}
-          </span>
+
+  return (
+    <Card className="overflow-hidden rounded-xl border-slate-800 bg-slate-900 shadow-md hover:border-slate-700 transition-all flex flex-col justify-between">
+      <div>
+        <button
+          type="button"
+          onClick={() => onView(project)}
+          aria-label={`Abrir projeto ${project.nomePeca}`}
+          className="group relative flex h-32 w-full items-center justify-center overflow-hidden bg-slate-950"
+        >
+          {image ? (
+            <img
+              src={image}
+              alt={`Imagem de ${project.nomePeca}`}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-1.5 text-slate-500">
+              <Box className="h-7 w-7 text-slate-600" />
+              <span className="text-[10px]">Sem modelo 3D</span>
+            </div>
+          )}
+          <Badge
+            variant="outline"
+            className={`absolute left-2.5 top-2.5 backdrop-blur text-[10px] py-0 px-2 font-semibold ${statusClass[project.status]}`}
+          >
+            {statusLabel[project.status].split('·')[0].trim()}
+          </Badge>
+        </button>
+
+        <div className="p-3 space-y-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="truncate font-bold text-white text-xs sm:text-sm" title={project.nomePeca}>
+                {project.nomePeca}
+              </h3>
+              <p className="text-[11px] text-slate-400 truncate">
+                #{reference} · {project.clienteNome || 'Cliente não informado'}
+              </p>
+            </div>
+            <details className="relative shrink-0">
+              <summary
+                aria-label="Mais ações"
+                className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </summary>
+              <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-700 bg-slate-950 p-1 shadow-xl">
+                <button
+                  onClick={() => onEdit(project)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-slate-400" />Editar projeto
+                </button>
+                <button
+                  onClick={() => onPdf(project)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                >
+                  <FileText className="h-3.5 w-3.5 text-indigo-400" />Gerar proposta
+                </button>
+                <button
+                  onClick={() => onDelete(project)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-rose-400" />Excluir
+                </button>
+              </div>
+            </details>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-slate-300">
+            <span>{project.quantidade || 1} un</span>
+            <span>·</span>
+            <span><Weight className="mr-0.5 inline h-3 w-3 text-slate-500" />{project.pesoEstimadoG}g</span>
+            <span>·</span>
+            <span><Clock3 className="mr-0.5 inline h-3 w-3 text-slate-500" />{formatHours(project.tempoEstimadoHoras)}</span>
+            {project.formaPagamento && (
+              <span className="inline-flex items-center gap-0.5 rounded bg-slate-800 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-400 border border-slate-700">
+                {project.formaPagamento === 'pix' && '⚡ Pix'}
+                {project.formaPagamento === 'credito' && `💳 Crédito ${project.parcelasCartao && project.parcelasCartao > 1 ? `${project.parcelasCartao}x` : '1x'}`}
+                {project.formaPagamento === 'debito' && '💳 Débito'}
+                {project.formaPagamento === 'dinheiro' && '💵 Dinheiro'}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-950 p-2 text-center border border-slate-800/80">
+            <MoneyCell label="Custo" value={money(project.custoTotal)} />
+            <MoneyCell label="Preço" value={money(project.precoCobrado)} />
+            <MoneyCell label="Lucro" value={money(project.lucroLiquido)} highlight />
+          </div>
+
+          <div className={`flex items-center justify-between text-[11px] ${project.impressoraId ? 'text-slate-400' : ['aprovado', 'em_impressao'].includes(project.status) ? 'text-amber-300' : 'text-slate-500'}`}>
+            <span className="truncate">
+              {!project.impressoraId && ['aprovado', 'em_impressao'].includes(project.status) && <AlertTriangle className="h-3 w-3 inline mr-1" />}
+              {printerName || (project.status === 'orcamento' ? 'Impressora: Na aprovação' : 'Impressora: Não definida')}
+            </span>
+            {deadline && (
+              <span className={`text-[10px] shrink-0 ${late ? 'font-semibold text-rose-300' : 'text-slate-400'}`}>
+                {late ? 'Atrasado' : deadline.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-1.5 border-t border-slate-800/90 p-2.5 bg-slate-950/40">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onView(project)}
+          className="border-slate-750 bg-slate-900 text-slate-300 hover:text-white text-[11px] h-7 px-2.5 rounded-lg flex-1"
+        >
+          <Eye className="mr-1 h-3 w-3" />Ver
+        </Button>
+
+        {project.status === 'orcamento' && (
+          <Button
+            size="sm"
+            onClick={() => onStatus(project.id, 'aprovado')}
+            className="bg-emerald-600 text-[11px] text-white hover:bg-emerald-500 h-7 px-2.5 rounded-lg flex-1 font-semibold"
+          >
+            <Check className="mr-1 h-3 w-3" />Aprovar
+          </Button>
+        )}
+
+        {project.status === 'aprovado' && (
+          canStart ? (
+            <Button
+              size="sm"
+              onClick={() => onStatus(project.id, 'em_impressao')}
+              className="bg-sky-600 text-[11px] text-white hover:bg-sky-500 h-7 px-2.5 rounded-lg flex-1 font-semibold"
+            >
+              <Play className="mr-1 h-3 w-3" />Iniciar
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => onStartWithPrinter(project)}
+              className="bg-sky-600 text-[11px] text-white hover:bg-sky-500 h-7 px-2.5 rounded-lg flex-1 font-semibold"
+            >
+              <Play className="mr-1 h-3 w-3" />Iniciar
+            </Button>
+          )
+        )}
+
+        {project.status === 'em_impressao' && (
+          <Button
+            size="sm"
+            onClick={() => onStatus(project.id, 'concluido')}
+            className="bg-indigo-600 text-[11px] text-white hover:bg-indigo-500 h-7 px-2.5 rounded-lg flex-1 font-semibold"
+          >
+            <Check className="mr-1 h-3 w-3" />Concluir
+          </Button>
         )}
       </div>
-      {deadline && <p className={`text-xs ${late ? 'font-semibold text-rose-300' : 'text-slate-400'}`}>{late ? 'Atrasado · ' : 'Entrega prevista · '}{deadline.toLocaleDateString('pt-BR')}</p>}
-      <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-950 p-3"><MoneyCell label="Custo estimado" value={money(project.custoTotal)} /><MoneyCell label="Preço de venda" value={money(project.precoCobrado)} /><MoneyCell label="Lucro estimado" value={money(project.lucroLiquido)} highlight /></div>
-      <div className={`flex items-center gap-2 text-xs ${project.impressoraId ? 'text-slate-400' : ['aprovado', 'em_impressao'].includes(project.status) ? 'text-amber-300' : 'text-slate-500'}`}>{!project.impressoraId && ['aprovado', 'em_impressao'].includes(project.status) && <AlertTriangle className="h-3.5 w-3.5" />}Impressora: {printerName || (project.status === 'orcamento' ? 'A definir na aprovação' : 'Não definida')}</div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3"><Button size="sm" onClick={() => onView(project)} className="bg-indigo-600 text-xs text-white hover:bg-indigo-500"><Eye className="mr-1.5 h-3.5 w-3.5" />Abrir projeto</Button>
-        {project.status === 'orcamento' && <Button size="sm" onClick={() => onStatus(project.id, 'aprovado')} className="bg-emerald-600 text-xs text-white hover:bg-emerald-500"><Check className="mr-1.5 h-3.5 w-3.5" />Aprovar orçamento</Button>}
-        {project.status === 'aprovado' && (canStart ? <Button size="sm" onClick={() => onStatus(project.id, 'em_impressao')} className="bg-sky-600 text-xs text-white hover:bg-sky-500"><Play className="mr-1.5 h-3.5 w-3.5" />Iniciar produção</Button> : <Button size="sm" onClick={() => onStartWithPrinter(project)} className="bg-sky-600 text-xs text-white hover:bg-sky-500"><Play className="mr-1.5 h-3.5 w-3.5" />Escolher impressora & Iniciar</Button>)}
-        {project.status === 'em_impressao' && <Button size="sm" onClick={() => onStatus(project.id, 'concluido')} className="bg-indigo-600 text-xs text-white hover:bg-indigo-500"><Check className="mr-1.5 h-3.5 w-3.5" />Marcar como concluído</Button>}
-      </div>
-    </div>
-  </Card>;
+    </Card>
+  );
 };
 
 const MoneyCell: React.FC<{ label: string; value: string; highlight?: boolean }> = ({ label, value, highlight }) => <div><p className="text-[10px] leading-tight text-slate-500">{label}</p><p className={`mt-1 text-xs font-bold ${highlight ? 'text-emerald-300' : 'text-white'}`}>{value}</p></div>;
@@ -251,25 +378,25 @@ export const ProjetosManager: React.FC = () => {
             key={item.id}
             type="button"
             onClick={() => setFiltro(item.id)}
-            className={`text-left rounded-2xl border bg-slate-900 transition-all shadow-lg ${
+            className={`text-left rounded-xl border bg-slate-900 transition-all shadow-md ${
               isSelected ? item.activeBg : item.idleBg
             }`}
           >
-            <div className="p-4 sm:p-5 flex flex-col justify-between h-full space-y-3">
+            <div className="p-3 sm:p-3.5 flex flex-col justify-between h-full space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   {item.label}
                 </span>
-                <Badge className={`${item.badgeClass} text-[10px] px-2 py-0.5 font-bold`}>
+                <Badge className={`${item.badgeClass} text-[9px] px-1.5 py-0 font-bold`}>
                   {item.badge}
                 </Badge>
               </div>
               <div>
-                <strong className="text-2xl lg:text-3xl font-black text-white tracking-tight">
+                <strong className="text-xl lg:text-2xl font-black text-white tracking-tight">
                   {item.count}
                 </strong>
               </div>
-              <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
+              <div className="pt-1.5 border-t border-slate-800/80 text-[10px] text-slate-400 flex items-center justify-between">
                 <span>{item.detail}</span>
                 {isSelected && (
                   <span className="text-[10px] font-bold text-indigo-400">Ativo</span>
@@ -280,9 +407,9 @@ export const ProjetosManager: React.FC = () => {
         );
       })}
     </section>
-    <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><Input value={busca} onChange={event => setBusca(event.target.value)} placeholder="Buscar projeto ou cliente" aria-label="Buscar projeto ou cliente" className="border-slate-800 bg-slate-900 pl-9 text-white" /></div>
+    <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><Input value={busca} onChange={event => setBusca(event.target.value)} placeholder="Buscar projeto ou cliente" aria-label="Buscar projeto ou cliente" className="border-slate-800 bg-slate-900 pl-9 text-xs text-white h-9 rounded-xl" /></div>
 
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{projectsFiltered.map(project => { const assignedPrinter = impressoras.find(printer => printer.id === project.impressoraId); return <ProjectCard key={project.id} project={project} printerName={assignedPrinter?.nome} printerCanStart={assignedPrinter?.status === 'disponivel'} onView={setViewProject} onEdit={setEditProject} onDelete={handleDelete} onPdf={openPdf} onStatus={updateProjetoStatus} onStartWithPrinter={handleOpenStartProduction} />; })}</section>
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{projectsFiltered.map(project => { const assignedPrinter = impressoras.find(printer => printer.id === project.impressoraId); return <ProjectCard key={project.id} project={project} printerName={assignedPrinter?.nome} printerCanStart={assignedPrinter?.status === 'disponivel'} onView={setViewProject} onEdit={setEditProject} onDelete={handleDelete} onPdf={openPdf} onStatus={updateProjetoStatus} onStartWithPrinter={handleOpenStartProduction} />; })}</section>
     {projectsFiltered.length === 0 && <Card className="border-slate-800 bg-slate-900 p-10 text-center"><FolderKanban className="mx-auto h-8 w-8 text-slate-500" /><p className="mt-3 text-sm text-slate-300">{busca ? 'Nenhum projeto corresponde à busca.' : 'Nenhum projeto nesta categoria.'}</p><Link to="/cliente/calculadora"><Button className="mt-4 bg-indigo-600 text-white"><Plus className="mr-2 h-4 w-4" />Criar primeiro projeto</Button></Link></Card>}
 
     {viewProject && <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-black/80 p-3 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) setViewProject(null); }}><article className="my-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
