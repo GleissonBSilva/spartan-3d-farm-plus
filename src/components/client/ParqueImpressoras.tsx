@@ -1,15 +1,15 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw, Thermometer, Fan, Layers, Disc, Package } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, Play, Plus, Wrench, X, DollarSign, Trash2, Edit2, Wifi, Radio, Eye, EyeOff, RefreshCw, Thermometer, Fan, Layers, Disc, Package, FileText } from 'lucide-react';
 import { useSaaSData } from '@/context/SaaSDataContext';
-import { Impressora3D } from '@/types/saas';
+import { Impressora3D, FilamentoEstoque, ProjectMaterial, ProjetoImpressao3D } from '@/types/saas';
 import { toast } from 'sonner';
 
 const MAINTENANCE_TASKS = ['Limpar bico', 'Lubrificar eixos', 'Limpar mesa', 'Verificar correias', 'Verificar ventiladores'];
@@ -81,6 +81,7 @@ import { useAuth } from '@/context/AuthContext';
 
 export const ParqueImpressoras: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const {
     impressoras: rawImpressoras,
     projetos,
@@ -381,6 +382,62 @@ export const ParqueImpressoras: React.FC = () => {
         completingPrintersRef.current.delete(printer.id);
       }, 3000);
     }
+  };
+
+  const handleCriarOrcamento = (
+    printer: Impressora3D,
+    rawPieceName?: string | null,
+    spool?: FilamentoEstoque | null,
+    weightGrams?: number,
+    estimatedSeconds?: number
+  ) => {
+    const cleanName = (rawPieceName || 'Peça Bambu Studio').replace(/\.(gcode|3mf|stl)$/i, '').trim();
+    const durationHours = estimatedSeconds ? Number((estimatedSeconds / 3600).toFixed(2)) : 1.5;
+    const finalWeight = weightGrams && weightGrams > 0 ? weightGrams : 45;
+
+    const materialsList: ProjectMaterial[] = spool ? [{
+      id: crypto.randomUUID(),
+      materialId: spool.id,
+      materialName: `${spool.tipo} - ${spool.cor}`,
+      filamentType: spool.tipo,
+      color: spool.cor,
+      colorHex: spool.corHex,
+      weightGrams: finalWeight,
+      costPerGram: Number((spool.precoKg / 1000).toFixed(4)),
+      totalCost: Number(((spool.precoKg / 1000) * finalWeight).toFixed(2)),
+    }] : (filamentos[0] ? [{
+      id: crypto.randomUUID(),
+      materialId: filamentos[0].id,
+      materialName: `${filamentos[0].tipo} - ${filamentos[0].cor}`,
+      filamentType: filamentos[0].tipo,
+      color: filamentos[0].cor,
+      colorHex: filamentos[0].corHex,
+      weightGrams: finalWeight,
+      costPerGram: Number((filamentos[0].precoKg / 1000).toFixed(4)),
+      totalCost: Number(((filamentos[0].precoKg / 1000) * finalWeight).toFixed(2)),
+    }] : []);
+
+    const projectData: Partial<ProjetoImpressao3D> = {
+      nomePeca: cleanName,
+      clienteNome: '',
+      clienteContato: '',
+      impressoraId: printer.id,
+      tempoEstimadoHoras: durationHours,
+      pesoEstimadoG: finalWeight,
+      materials: materialsList,
+      quantidadeLote: 1,
+      modoVenda: 'varejo',
+      status: 'orcamento',
+      observacoes: `Orçamento gerado a partir da impressão direta na impressora ${printer.nome} (Arquivo: ${rawPieceName || cleanName})`,
+    };
+
+    navigate('/cliente/calculadora', {
+      state: {
+        copyProject: projectData,
+      },
+    });
+
+    toast.info(`Calculadora aberta com os dados da peça "${cleanName}".`);
   };
 
   const bambuPrintersConfigKey = useMemo(() => {
@@ -1266,6 +1323,17 @@ export const ParqueImpressoras: React.FC = () => {
                     type="button"
                     size="sm"
                     variant="outline"
+                    onClick={() => handleCriarOrcamento(printer, liveTelemetry?.subtaskName || printer.projetoAtual, matchingSpool, estimatedWeightGrams, remainingPrintSeconds || totalSecondsEstimated)}
+                    title="Criar Orçamento ou Projeto formal no Spartan a partir desta impressão"
+                    className="h-7 px-2.5 text-[11px] font-semibold border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-white rounded-lg transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5 mr-1 text-indigo-400" />
+                    Criar Orçamento
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
                     onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])}
                     title="Zerar tempo e concluir projeto agora"
                     className="h-7 px-2.5 text-[11px] font-semibold border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-white rounded-lg transition-colors"
@@ -1379,12 +1447,26 @@ export const ParqueImpressoras: React.FC = () => {
             </div>
           ) : (
             <div className="rounded-xl bg-slate-950 px-4 py-3 text-sm text-slate-400">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <span>Nenhum trabalho em produção. Máquina livre.</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-slate-300 font-medium">Nenhum trabalho em produção. Máquina livre.</span>
+                  {liveTelemetry?.subtaskName && (
+                    <span className="text-[11px] text-slate-500 font-mono block mt-0.5">
+                      Último arquivo: <strong className="text-slate-400">{liveTelemetry.subtaskName}</strong>
+                    </span>
+                  )}
+                </div>
                 {liveTelemetry?.subtaskName && (
-                  <span className="text-[11px] text-slate-500 font-mono">
-                    Último arquivo: <strong className="text-slate-400">{liveTelemetry.subtaskName}</strong>
-                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleCriarOrcamento(printer, liveTelemetry.subtaskName, matchingSpool, estimatedWeightGrams, totalSecondsEstimated)}
+                    className="h-7 px-2.5 text-[11px] font-semibold border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-white rounded-lg transition-colors shrink-0"
+                  >
+                    <FileText className="w-3.5 h-3.5 mr-1 text-indigo-400" />
+                    Gerar Orçamento de &quot;{liveTelemetry.subtaskName.replace(/\.(gcode|3mf|stl)$/i, '')}&quot;
+                  </Button>
                 )}
               </div>
             </div>
@@ -1398,6 +1480,15 @@ export const ParqueImpressoras: React.FC = () => {
                 <Button size="sm" variant="outline" onClick={() => updateImpressoraStatus(printer.id, 'pausada')} className="border-slate-700 bg-slate-950 text-xs text-white hover:bg-slate-800">
                   <Pause className="mr-1.5 h-3.5 w-3.5" />Pausar
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCriarOrcamento(printer, liveTelemetry?.subtaskName || printer.projetoAtual, matchingSpool, estimatedWeightGrams, remainingPrintSeconds || totalSecondsEstimated)}
+                  className="border-indigo-500/40 bg-indigo-950/40 text-xs text-indigo-300 hover:bg-indigo-900/60"
+                >
+                  <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-400" />
+                  Gerar Orçamento
+                </Button>
                 <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold shadow-md shadow-emerald-600/20">
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Concluir & Liberar Máquina
                 </Button>
@@ -1407,6 +1498,15 @@ export const ParqueImpressoras: React.FC = () => {
               <>
                 <Button size="sm" onClick={() => updateImpressoraStatus(printer.id, 'imprimindo')} className="bg-sky-600 text-xs text-white hover:bg-sky-500">
                   <Play className="mr-1.5 h-3.5 w-3.5" />Retomar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCriarOrcamento(printer, liveTelemetry?.subtaskName || printer.projetoAtual, matchingSpool, estimatedWeightGrams, remainingPrintSeconds || totalSecondsEstimated)}
+                  className="border-indigo-500/40 bg-indigo-950/40 text-xs text-indigo-300 hover:bg-indigo-900/60"
+                >
+                  <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-400" />
+                  Gerar Orçamento
                 </Button>
                 <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold">
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Concluir & Liberar Máquina
