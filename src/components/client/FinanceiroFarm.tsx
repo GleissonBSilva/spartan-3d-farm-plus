@@ -40,13 +40,13 @@ const formatGrams = (val: number): string => {
   return `${g.toFixed(0)} g`;
 };
 
-type PeriodPreset = 'hoje' | '7dias' | 'mes_atual' | 'mes_anterior' | 'ano_atual' | 'todos' | 'custom';
+type PeriodPreset = 'hoje' | '7dias' | '30dias' | 'mes_atual' | 'mes_anterior' | 'ano_atual' | 'todos' | 'custom';
 
 export const FinanceiroFarm: React.FC = () => {
   const { projetos, filamentos, impressoras, historicoImpressoras } = useSaaSData();
 
-  // Estados dos Filtros
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('mes_atual');
+  // Estados dos Filtros (Inicia por padrão nos últimos 30 dias para total harmonia com Projetos e Centro de Comando)
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('30dias');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'concluido' | 'em_impressao' | 'aprovado' | 'cancelado' | 'orcamento'>('todos');
   const [paymentFilter, setPaymentFilter] = useState<'todos' | 'pix' | 'credito' | 'debito' | 'dinheiro'>('todos');
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,8 +55,9 @@ export const FinanceiroFarm: React.FC = () => {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(() => {
-    const d = new Date(today.getFullYear(), today.getMonth(), 1);
-    return d.toISOString().slice(0, 10);
+    const past = new Date(today);
+    past.setDate(today.getDate() - 29);
+    return past.toISOString().slice(0, 10);
   });
   const [endDate, setEndDate] = useState(todayStr);
 
@@ -71,6 +72,11 @@ export const FinanceiroFarm: React.FC = () => {
     } else if (preset === '7dias') {
       const past = new Date(now);
       past.setDate(now.getDate() - 6);
+      setStartDate(past.toISOString().slice(0, 10));
+      setEndDate(now.toISOString().slice(0, 10));
+    } else if (preset === '30dias') {
+      const past = new Date(now);
+      past.setDate(now.getDate() - 29);
       setStartDate(past.toISOString().slice(0, 10));
       setEndDate(now.toISOString().slice(0, 10));
     } else if (preset === 'mes_atual') {
@@ -245,6 +251,14 @@ export const FinanceiroFarm: React.FC = () => {
             className={`text-xs h-7 px-2.5 rounded-lg ${periodPreset === '7dias' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
           >
             7 dias
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handlePresetChange('30dias')}
+            className={`text-xs h-7 px-2.5 rounded-lg ${periodPreset === '30dias' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+          >
+            30 dias
           </Button>
           <Button
             size="sm"
@@ -446,30 +460,38 @@ export const FinanceiroFarm: React.FC = () => {
           </div>
         </Card>
 
-        {/* A Receber / Em Produção */}
+        {/* A Receber / Em Produção ou Orçamentos em Aberto */}
         <Card className="bg-slate-900 border border-amber-500/30 rounded-2xl shadow-lg hover:border-amber-500/50 transition-all">
           <div className="p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-xs uppercase tracking-wider">
                 <Clock className="w-4 h-4" />
-                <span>A Receber / Em Curso</span>
+                <span>{financialMetrics.pendingCount > 0 ? 'A Receber / Em Curso' : 'Orçamentos em Aberto'}</span>
               </div>
               <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px] font-bold">
-                {financialMetrics.pendingCount} em aberto
+                {financialMetrics.pendingCount > 0
+                  ? `${financialMetrics.pendingCount} em produção`
+                  : `${financialMetrics.quotesCount} proposta${financialMetrics.quotesCount === 1 ? '' : 's'}`}
               </Badge>
             </div>
             <div>
               <p className="text-2xl lg:text-3xl font-black text-amber-400">
-                {formatMoney(financialMetrics.receitaEmAndamento)}
+                {financialMetrics.pendingCount > 0
+                  ? formatMoney(financialMetrics.receitaEmAndamento)
+                  : formatMoney(financialMetrics.valorTotalOrcamentos)}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Lucro previsto: <strong className="text-slate-200">{formatMoney(financialMetrics.lucroPrevistoEmAndamento)}</strong>
+                {financialMetrics.pendingCount > 0
+                  ? `Lucro previsto: ${formatMoney(financialMetrics.lucroPrevistoEmAndamento)}`
+                  : `Propostas em negociação / aguardando`}
               </p>
             </div>
             <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
-              <span>Status dos Pedidos:</span>
+              <span>{financialMetrics.pendingCount > 0 ? 'Orçamentos:' : 'Status:'}</span>
               <span className="font-semibold text-amber-300">
-                Em fila ou impressão
+                {financialMetrics.pendingCount > 0
+                  ? `${formatMoney(financialMetrics.valorTotalOrcamentos)} em ${financialMetrics.quotesCount} orçamentos`
+                  : 'Aguardando aprovação'}
               </span>
             </div>
           </div>
