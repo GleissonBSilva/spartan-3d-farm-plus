@@ -43,6 +43,40 @@ const formatSecondsToTime = (totalSeconds: number) => {
 
 const formatHours = (inputTime: number | string) => formatSecondsToTime(parseAndSanitizeEstimatedSeconds(inputTime));
 
+interface AmsTray {
+  id: string;
+  color: string;
+  type: string;
+  subBrand: string;
+  remain: number;
+  active: boolean;
+  loaded: boolean;
+}
+
+interface AmsUnit {
+  id: string;
+  humidity?: string;
+  temp?: string;
+  trays: AmsTray[];
+}
+
+interface PrinterTelemetry {
+  gcodeState: string;
+  nozzleTemp: number | null;
+  nozzleTargetTemp: number | null;
+  bedTemp: number | null;
+  bedTargetTemp: number | null;
+  progressPercent: number | null;
+  remainingTimeMinutes: number | null;
+  subtaskName: string | null;
+  layerNum: number | null;
+  totalLayerNum: number | null;
+  fanSpeed?: number | null;
+  ams?: AmsUnit[];
+  activeTray?: string | null;
+  lastUpdated: number;
+}
+
 import { useAuth } from '@/context/AuthContext';
 
 export const ParqueImpressoras: React.FC = () => {
@@ -65,6 +99,9 @@ export const ParqueImpressoras: React.FC = () => {
     refreshFarmData,
   } = useSaaSData();
   
+  // Mapa de telemetria ao vivo da impressora (Bambu Lab / Klipper)
+  const [telemetryMap, setTelemetryMap] = useState<Record<string, PrinterTelemetry>>({});
+
   // Estado local para exclusão manual garantida e metadados customizados (estritamente isolados por user.id)
   const [deletedPrinterIds, setDeletedPrinterIds] = useState<string[]>([]);
   const [customInvestments, setCustomInvestments] = useState<Record<string, { custoInvestimento: number; vidaUtilHoras: number; depreciacaoHora: number }>>({});
@@ -345,42 +382,6 @@ export const ParqueImpressoras: React.FC = () => {
       }, 3000);
     }
   };
-
-  interface AmsTray {
-    id: string;
-    color: string;
-    type: string;
-    subBrand: string;
-    remain: number;
-    active: boolean;
-    loaded: boolean;
-  }
-
-  interface AmsUnit {
-    id: string;
-    humidity?: string;
-    temp?: string;
-    trays: AmsTray[];
-  }
-
-  interface PrinterTelemetry {
-    gcodeState: string;
-    nozzleTemp: number | null;
-    nozzleTargetTemp: number | null;
-    bedTemp: number | null;
-    bedTargetTemp: number | null;
-    progressPercent: number | null;
-    remainingTimeMinutes: number | null;
-    subtaskName: string | null;
-    layerNum: number | null;
-    totalLayerNum: number | null;
-    fanSpeed?: number | null;
-    ams?: AmsUnit[];
-    activeTray?: string | null;
-    lastUpdated: number;
-  }
-
-  const [telemetryMap, setTelemetryMap] = useState<Record<string, PrinterTelemetry>>({});
 
   const bambuPrintersConfigKey = useMemo(() => {
     return impressoras
