@@ -41,7 +41,9 @@ export function getSavedPixConfig(userId?: string | null): PixConfig {
           const parsed = JSON.parse(plat);
           if (parsed.chave) return { ...DEFAULT_PIX_CONFIG, ...parsed };
         }
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
     return { ...DEFAULT_PIX_CONFIG };
   }
