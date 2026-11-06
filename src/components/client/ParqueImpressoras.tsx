@@ -11,8 +11,9 @@ import { AlertTriangle, CheckCircle2, CirclePower, Clock3, Cpu, History, Pause, 
 import { useSaaSData } from '@/context/SaaSDataContext';
 import { Impressora3D, FilamentoEstoque, ProjectMaterial, ProjetoImpressao3D } from '@/types/saas';
 import { toast } from 'sonner';
+import { ModalRegistrarFalha } from './ModalRegistrarFalha';
 
-const MAINTENANCE_TASKS = ['Limpar bico', 'Lubrificar eixos', 'Limpar mesa', 'Verificar correias', 'Verificar ventiladores'];
+const MAINTENANCE_TASKS = ['Desentupir bico / Cold pull', 'Trocar bico', 'Limpar bico', 'Lubrificar eixos', 'Limpar mesa', 'Verificar correias', 'Verificar ventiladores'];
 const STATUS: Record<Impressora3D['status'], { label: string; badge: string; dot: string }> = {
   disponivel: { label: 'Disponível', badge: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' },
   imprimindo: { label: 'Imprimindo', badge: 'border-sky-500/30 bg-sky-500/10 text-sky-300', dot: 'bg-sky-400' },
@@ -210,6 +211,7 @@ export const ParqueImpressoras: React.FC = () => {
   const [maintenanceNote, setMaintenanceNote] = useState('');
   const [savingMaintenance, setSavingMaintenance] = useState(false);
   const [progressDraft, setProgressDraft] = useState<Record<string, number>>({});
+  const [failureModalPrinter, setFailureModalPrinter] = useState<Impressora3D | null>(null);
   
   const [editingPrinterId, setEditingPrinterId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState('');
@@ -1492,6 +1494,16 @@ export const ParqueImpressoras: React.FC = () => {
                 <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold shadow-md shadow-emerald-600/20">
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Concluir & Liberar Máquina
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setFailureModalPrinter(printer)}
+                  className="border-rose-500/50 bg-rose-950/30 text-xs text-rose-300 hover:bg-rose-900/50 hover:text-white font-semibold"
+                  title="Interromper por bico entupido, peça descolou ou erro e contabilizar a perda"
+                >
+                  <AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-rose-400" />
+                  Falha / Bico Entupido
+                </Button>
               </>
             )}
             {printer.status === 'pausada' && (
@@ -1511,6 +1523,16 @@ export const ParqueImpressoras: React.FC = () => {
                 <Button size="sm" onClick={() => handleConcluirTrabalho(printer, false, telemetryMap[printer.id])} className="bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-bold">
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Concluir & Liberar Máquina
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setFailureModalPrinter(printer)}
+                  className="border-rose-500/50 bg-rose-950/30 text-xs text-rose-300 hover:bg-rose-900/50 hover:text-white font-semibold"
+                  title="Interromper por bico entupido, peça descolou ou erro e contabilizar a perda"
+                >
+                  <AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-rose-400" />
+                  Falha / Bico Entupido
+                </Button>
               </>
             )}
             {printer.status === 'disponivel' && <Link to="/cliente/projetos"><Button size="sm" className="bg-indigo-600 text-xs text-white hover:bg-indigo-500"><Play className="mr-1.5 h-3.5 w-3.5" />Iniciar impressão</Button></Link>}
@@ -1519,10 +1541,61 @@ export const ParqueImpressoras: React.FC = () => {
             {printer.status === 'desconectada' && <Button size="sm" variant="outline" onClick={() => updateImpressoraStatus(printer.id, 'disponivel')} className="border-slate-700 bg-slate-950 text-xs text-white hover:bg-slate-800">Marcar disponível</Button>}
             {!printer.projetoAtualId && printer.status !== 'manutencao' && printer.status !== 'disponivel' && <Button size="sm" variant="ghost" onClick={() => updateImpressoraStatus(printer.id, 'manutencao')} className="text-xs text-slate-300 hover:text-orange-300"><Wrench className="mr-1.5 h-3.5 w-3.5" />Iniciar manutenção</Button>}
             {!printer.projetoAtualId && printer.status === 'manutencao' && <Button size="sm" variant="ghost" onClick={() => setMaintenancePrinter(printer.id)} className="text-xs text-orange-300 hover:text-orange-200"><Wrench className="mr-1.5 h-3.5 w-3.5" />Registrar manutenção concluída</Button>}
-            {printer.projetoAtualId && <span className="self-center text-[11px] text-slate-500">Finalize ou cancele o projeto antes da manutenção.</span>}
+            {printer.projetoAtualId && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setFailureModalPrinter(printer)}
+                className="text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/30"
+                title="Registrar interrupção por falha e contabilizar perda de material"
+              >
+                <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
+                Interromper por Falha / Bico Entupido
+              </Button>
+            )}
           </div>
 
-          {events.length > 0 && <div className="border-t border-slate-800 pt-3"><p className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300"><History className="h-3.5 w-3.5" />Histórico recente</p><div className="space-y-2">{events.map(event => <div key={event.id} className="flex items-center justify-between gap-2 text-xs"><div className="min-w-0"><span className="text-slate-300">{event.tipo === 'project_completed' ? `Concluiu: ${String(event.payload.project_name || 'Projeto')}` : event.tipo === 'maintenance_completed' ? 'Manutenção registrada' : `Status: ${STATUS[String(event.payload.to) as Impressora3D['status']]?.label || event.payload.to || 'atualizado'}${event.payload.project ? ` (${String(event.payload.project)})` : ''}`}</span>{event.tipo === 'maintenance_completed' && Array.isArray(event.payload.tasks) && <p className="truncate text-[10px] text-slate-500">{(event.payload.tasks as string[]).join(' · ')}</p>}</div><span className="shrink-0 text-slate-500">{new Date(event.data).toLocaleDateString('pt-BR')}{event.tipo === 'project_completed' ? ` · ${formatHours(Number(event.payload.hours || 0))}` : ''}</span></div>)}</div></div>}
+          {events.length > 0 && (
+            <div className="border-t border-slate-800 pt-3">
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300">
+                <History className="h-3.5 w-3.5" />Histórico recente
+              </p>
+              <div className="space-y-2">
+                {events.map(event => (
+                  <div key={event.id} className="flex items-center justify-between gap-2 text-xs">
+                    <div className="min-w-0">
+                      <span className="text-slate-300">
+                        {event.tipo === 'project_completed' ? (
+                          `Concluiu: ${String(event.payload.project_name || 'Projeto')}`
+                        ) : event.tipo === 'print_failure' ? (
+                          <span className="text-rose-300 font-semibold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" />
+                            Falha: {String(event.payload.motivo || 'Erro de impressão')} ({Number(event.payload.gramas_perdidas || 0)}g perdidas aos {Number(event.payload.progresso || 0)}%)
+                          </span>
+                        ) : event.tipo === 'maintenance_completed' ? (
+                          'Manutenção registrada'
+                        ) : (
+                          `Status: ${STATUS[String(event.payload.to) as Impressora3D['status']]?.label || event.payload.to || 'atualizado'}${event.payload.project ? ` (${String(event.payload.project)})` : ''}`
+                        )}
+                      </span>
+                      {event.tipo === 'print_failure' && event.payload.projeto_nome && (
+                        <p className="truncate text-[10px] text-slate-400">
+                          Peça: {String(event.payload.projeto_nome)} · Prejuízo: R$ {Number(event.payload.custo_prejuizo || 0).toFixed(2)}
+                        </p>
+                      )}
+                      {event.tipo === 'maintenance_completed' && Array.isArray(event.payload.tasks) && (
+                        <p className="truncate text-[10px] text-slate-500">{(event.payload.tasks as string[]).join(' · ')}</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-slate-500">
+                      {new Date(event.data).toLocaleDateString('pt-BR')}
+                      {event.tipo === 'project_completed' ? ` · ${formatHours(Number(event.payload.hours || 0))}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {(serviceDue || serviceSoon) && <p className={`flex items-center gap-2 text-xs ${serviceDue ? 'text-orange-300' : 'text-amber-300'}`}><AlertTriangle className="h-4 w-4" />{serviceDue ? 'Manutenção no intervalo atingido.' : 'Manutenção próxima.'}</p>}
         </Card>;
       })}
@@ -1735,6 +1808,18 @@ export const ParqueImpressoras: React.FC = () => {
     )}
 
     {maintenancePrinter && <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-black/80 p-3 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget && !savingMaintenance) setMaintenancePrinter(null); }}><form onSubmit={submitMaintenance} className="my-auto w-full max-w-lg space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-5 sm:p-6"><div className="flex items-start justify-between"><div><h3 className="font-bold text-white">Registrar manutenção</h3><p className="text-sm text-slate-400">{impressoras.find(item => item.id === maintenancePrinter)?.nome}</p></div><Button type="button" variant="ghost" size="icon" onClick={() => setMaintenancePrinter(null)}><X className="h-4 w-4" /></Button></div><fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-slate-300">O que foi feito?</legend>{MAINTENANCE_TASKS.map(task => <label key={task} className="flex items-center gap-3 rounded-lg bg-slate-950 px-3 py-2.5 text-sm text-slate-200"><input type="checkbox" checked={maintenanceTasks.includes(task)} onChange={event => setMaintenanceTasks(previous => event.target.checked ? [...previous, task] : previous.filter(value => value !== task))} className="accent-indigo-500" />{task}</label>)}</fieldset><label className="block text-xs text-slate-300">Observação<textarea rows={3} value={maintenanceNote} onChange={event => setMaintenanceNote(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white" placeholder="Detalhes opcionais" /></label><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setMaintenancePrinter(null)} className="border-slate-700 bg-slate-950 text-slate-200 hover:bg-slate-800 hover:text-white">Cancelar</Button><Button type="submit" disabled={savingMaintenance} className="bg-indigo-600 text-white hover:bg-indigo-500">{savingMaintenance ? 'Salvando…' : 'Registrar manutenção'}</Button></div></form></div>}
+
+    {/* MODAL DE REGISTRO DE FALHA & CONTABILIZAÇÃO DE PERDA */}
+    <ModalRegistrarFalha
+      isOpen={Boolean(failureModalPrinter)}
+      onClose={() => setFailureModalPrinter(null)}
+      printer={failureModalPrinter}
+      initialProgress={
+        failureModalPrinter
+          ? (telemetryMap[failureModalPrinter.id]?.progressPercent ?? failureModalPrinter.progressoPercentual ?? 30)
+          : 30
+      }
+    />
   </div>;
 };
 

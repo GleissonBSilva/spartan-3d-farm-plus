@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { ProjetoImpressao3D } from '@/types/saas';
 import { createModelSignedUrl, uploadModelFile } from '@/services/fileService';
 import { useAuth } from '@/context/AuthContext';
+import { ModalRegistrarFalha } from './ModalRegistrarFalha';
 
 const ModelPreview = lazy(() => import('./ModelPreview').then(module => ({ default: module.ModelPreview })));
 const money = (value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -49,7 +50,8 @@ const ProjectCard: React.FC<{
   onDelete: (project: ProjetoImpressao3D) => void; onPdf: (project: ProjetoImpressao3D) => void;
   onStatus: (id: string, status: ProjetoImpressao3D['status']) => void;
   onStartWithPrinter: (project: ProjetoImpressao3D) => void;
-}> = ({ project, printerName, printerCanStart, onView, onEdit, onDelete, onPdf, onStatus, onStartWithPrinter }) => {
+  onReportFailure?: (project: ProjetoImpressao3D) => void;
+}> = ({ project, printerName, printerCanStart, onView, onEdit, onDelete, onPdf, onStatus, onStartWithPrinter, onReportFailure }) => {
   const image = useSignedImage(project.imagemPath);
   const materials = project.materials || [];
   const reference = project.id.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase();
@@ -116,6 +118,14 @@ const ProjectCard: React.FC<{
                 >
                   <FileText className="h-3.5 w-3.5 text-indigo-400" />Gerar proposta
                 </button>
+                {project.status === 'em_impressao' && onReportFailure && (
+                  <button
+                    onClick={() => onReportFailure(project)}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/10"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />Registrar falha / perda
+                  </button>
+                )}
                 <button
                   onClick={() => onDelete(project)}
                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-rose-300 hover:bg-rose-500/10"
@@ -203,13 +213,26 @@ const ProjectCard: React.FC<{
         )}
 
         {project.status === 'em_impressao' && (
-          <Button
-            size="sm"
-            onClick={() => onStatus(project.id, 'concluido')}
-            className="bg-indigo-600 text-[11px] text-white hover:bg-indigo-500 h-7 px-2.5 rounded-lg flex-1 font-semibold"
-          >
-            <Check className="mr-1 h-3 w-3" />Concluir
-          </Button>
+          <div className="flex items-center gap-1.5 flex-1">
+            <Button
+              size="sm"
+              onClick={() => onStatus(project.id, 'concluido')}
+              className="bg-indigo-600 text-[11px] text-white hover:bg-indigo-500 h-7 px-2 rounded-lg flex-1 font-semibold"
+            >
+              <Check className="mr-1 h-3 w-3" />Concluir
+            </Button>
+            {onReportFailure && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onReportFailure(project)}
+                className="border-rose-500/40 bg-rose-950/20 text-rose-300 hover:bg-rose-900/40 text-[11px] h-7 px-2 rounded-lg font-semibold shrink-0"
+                title="Registrar falha (bico entupido, peça soltou) e contabilizar perda"
+              >
+                <AlertTriangle className="h-3 w-3 text-rose-400 mr-1" />Falha
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </Card>
@@ -234,6 +257,7 @@ export const ProjetosManager: React.FC = () => {
   const [startProductionProject, setStartProductionProject] = useState<ProjetoImpressao3D | null>(null);
   const [selectedStartPrinterId, setSelectedStartPrinterId] = useState('');
   const [startingProduction, setStartingProduction] = useState(false);
+  const [failureModalProject, setFailureModalProject] = useState<ProjetoImpressao3D | null>(null);
 
   const handleOpenStartProduction = (project: ProjetoImpressao3D) => {
     setStartProductionProject(project);
@@ -409,7 +433,7 @@ export const ProjetosManager: React.FC = () => {
     </section>
     <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><Input value={busca} onChange={event => setBusca(event.target.value)} placeholder="Buscar projeto ou cliente" aria-label="Buscar projeto ou cliente" className="border-slate-800 bg-slate-900 pl-9 text-xs text-white h-9 rounded-xl" /></div>
 
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{projectsFiltered.map(project => { const assignedPrinter = impressoras.find(printer => printer.id === project.impressoraId); return <ProjectCard key={project.id} project={project} printerName={assignedPrinter?.nome} printerCanStart={assignedPrinter?.status === 'disponivel'} onView={setViewProject} onEdit={setEditProject} onDelete={handleDelete} onPdf={openPdf} onStatus={updateProjetoStatus} onStartWithPrinter={handleOpenStartProduction} />; })}</section>
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{projectsFiltered.map(project => { const assignedPrinter = impressoras.find(printer => printer.id === project.impressoraId); return <ProjectCard key={project.id} project={project} printerName={assignedPrinter?.nome} printerCanStart={assignedPrinter?.status === 'disponivel'} onView={setViewProject} onEdit={setEditProject} onDelete={handleDelete} onPdf={openPdf} onStatus={updateProjetoStatus} onStartWithPrinter={handleOpenStartProduction} onReportFailure={setFailureModalProject} />; })}</section>
     {projectsFiltered.length === 0 && <Card className="border-slate-800 bg-slate-900 p-10 text-center"><FolderKanban className="mx-auto h-8 w-8 text-slate-500" /><p className="mt-3 text-sm text-slate-300">{busca ? 'Nenhum projeto corresponde à busca.' : 'Nenhum projeto nesta categoria.'}</p><Link to="/cliente/calculadora"><Button className="mt-4 bg-indigo-600 text-white"><Plus className="mr-2 h-4 w-4" />Criar primeiro projeto</Button></Link></Card>}
 
     {viewProject && <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-black/80 p-3 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) setViewProject(null); }}><article className="my-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
@@ -524,6 +548,13 @@ export const ProjetosManager: React.FC = () => {
     )}
 
     {selectedProjetoPdf && <OrcamentoPdfModal isOpen onClose={() => setSelectedProjetoPdf(null)} projeto={selectedProjetoPdf} />}
+
+    {/* MODAL DE REGISTRO DE FALHA & CONTABILIZAÇÃO DE PERDA */}
+    <ModalRegistrarFalha
+      isOpen={Boolean(failureModalProject)}
+      onClose={() => setFailureModalProject(null)}
+      project={failureModalProject}
+    />
   </div>;
 };
 
