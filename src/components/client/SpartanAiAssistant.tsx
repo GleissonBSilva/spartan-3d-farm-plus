@@ -93,17 +93,17 @@ Estou pronto para analisar falhas (*stringing, warping, entupimento*), sugerir t
     const nomesImp = impressoras?.map(i => `${i.nome} (${i.status || 'pronta'})`).join(', ') || 'Nenhuma impressora cadastrada';
     
     const totalFil = filamentos?.length || 0;
-    const resumoFil = filamentos?.slice(0, 8).map(f => `${f.tipo} ${f.cor} (${f.pesoAtualGramas || 0}g)`).join(', ') || 'Nenhum carretel no momento';
+    const resumoFil = filamentos?.slice(0, 8).map(f => `${f.tipo} ${f.cor} (${f.pesoRestanteG || (f as any).quantidadeGramas || 0}g)`).join(', ') || 'Nenhum carretel no momento';
     
     const totalProj = projetos?.length || 0;
-    const projetosAtivos = projetos?.filter(p => p.status === 'imprimindo' || p.status === 'pendente').length || 0;
+    const projetosAtivos = projetos?.filter(p => p.status === 'em_impressao' || p.status === 'aprovado' || (p.status as any) === 'imprimindo' || (p.status as any) === 'pendente').length || 0;
 
     return `
 Contexto Real da Farm do Usuário no Spartan 3D:
 - Impressoras cadastradas (${totalImp}): ${nomesImp}.
 - Estoque de Filamentos (${totalFil} carretéis cadastrados): ${resumoFil}.
 - Projetos: ${totalProj} cadastrados (${projetosAtivos} em produção/fila).
-- Usuário: ${user?.nome || 'Operador Spartan'}.
+- Usuário: ${(user as any)?.nome || (user as any)?.name || user?.email || 'Operador Spartan'}.
 Use esses dados para personalizar as respostas quando fizer sentido (por exemplo, mencionando os modelos de impressora ou materiais que ele possui).
 `.trim();
   };

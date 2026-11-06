@@ -47,7 +47,7 @@ function mapUser(authUser: SupabaseUser, profile?: Record<string, unknown> | nul
   const metadata = authUser.user_metadata || {};
   const profileRole = profile?.role;
   const role: UserRole = profileRole === 'admin' || profileRole === 'manager' ? profileRole : 'client';
-  const resolvedPlatformRoles = profileRole === 'admin' && !platformRoles.includes('admin') ? [...platformRoles, 'admin'] : platformRoles;
+  const resolvedPlatformRoles = profileRole === 'admin' && !platformRoles.includes('admin') ? [...platformRoles, 'admin' as PlatformRole] : platformRoles;
   const isAdminUser = role === 'admin' || resolvedPlatformRoles.includes('admin') || resolvedPlatformRoles.includes('developer');
 
   const createdAtStr = typeof profile?.created_at === 'string' ? profile.created_at : authUser.created_at;

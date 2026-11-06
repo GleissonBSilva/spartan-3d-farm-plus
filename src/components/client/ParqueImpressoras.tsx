@@ -319,7 +319,7 @@ export const ParqueImpressoras: React.FC = () => {
       if (currentProject?.materials && currentProject.materials.length > 0) {
         // Se o projeto possui lista de materiais definidos
         consumirMultiplosFilamentos(currentProject.materials);
-        stockDeductedGrams = currentProject.materials.reduce((acc, m) => acc + (m.weightGrams || 0), 0);
+        stockDeductedGrams = currentProject.materials.reduce((acc, m) => acc + Number(m.weightGrams || 0), 0);
         stockFilamentLabel = currentProject.materials.map(m => `${m.filamentType} ${m.color || ''}`).join(', ');
       } else if (currentProject && currentProject.pesoEstimadoG > 0) {
         // Projeto com peso estimado sem materials detalhados

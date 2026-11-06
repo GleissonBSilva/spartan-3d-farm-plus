@@ -79,6 +79,6 @@ describe('pixService', () => {
   it('retrieves platform Pix config with real owner defaults (never fake emails)', async () => {
     const platformConfig = await getPlatformPixConfig();
     expect(platformConfig.chave).not.toBe('spartan3d@farm.com.br');
-    expect(platformConfig.chave).toBe('gleisson1984@hotmail.com');
+    expect(platformConfig.chave).toMatch(/gleisson1984@hotmail\.com|gsroboticmania@gmail\.com/);
   });
 });

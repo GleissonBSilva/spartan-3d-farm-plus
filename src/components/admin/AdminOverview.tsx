@@ -119,7 +119,7 @@ export const AdminOverview: React.FC = () => {
     const clientesBloqueados = clients.filter(c => c.status === 'overdue');
     const mrrBloqueado = clientesBloqueados.reduce((sum, c) => sum + (c.mrr || 0), 0);
 
-    const impressorasParadas = impressoras.filter(imp => imp.status === 'maintenance' || imp.status === 'offline');
+    const impressorasParadas = impressoras.filter(imp => imp.status === 'manutencao' || imp.status === 'desconectada' || (imp.status as any) === 'maintenance' || (imp.status as any) === 'offline');
     const perdaTotalIdentificada = totalPrejuizoFalhas + valorEmRiscoInadimplencia;
 
     return {
@@ -297,13 +297,13 @@ export const AdminOverview: React.FC = () => {
 
     // Impressoras paradas em manutenção
     impressoras
-      .filter(imp => imp.status === 'maintenance' || imp.status === 'offline')
+      .filter(imp => imp.status === 'manutencao' || imp.status === 'desconectada' || (imp.status as any) === 'maintenance' || (imp.status as any) === 'offline')
       .forEach(imp => {
         list.push({
           id: `imp-${imp.id}`,
           tipo: 'equipamento',
           titulo: `Máquina Parada: ${imp.nome}`,
-          descricao: `Status atual: ${imp.status === 'maintenance' ? 'Em Manutenção' : 'Offline'}. Capacidade produtiva reduzida.`,
+          descricao: `Status atual: ${imp.status === 'manutencao' || (imp.status as any) === 'maintenance' ? 'Em Manutenção' : 'Offline'}. Capacidade produtiva reduzida.`,
           impactoStr: 'Ociosidade da Farm',
           severidade: 'baixa',
         });

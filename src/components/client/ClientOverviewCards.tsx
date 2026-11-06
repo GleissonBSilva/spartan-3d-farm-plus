@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Sparkles, Crown, MessageSquareCheck, ArrowUpRight } from 'lucide-react';
+import { Sparkles, Crown, MessageSquare, ArrowUpRight } from 'lucide-react';
 import { Plan } from '@/types/saas';
 
 interface ClientOverviewCardsProps {
@@ -108,7 +108,7 @@ export const ClientOverviewCards: React.FC<ClientOverviewCardsProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                  <MessageSquareCheck className="w-4 h-4" />
+                  <MessageSquare className="w-4 h-4" />
                 </div>
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Gerente de Sucesso</span>
               </div>

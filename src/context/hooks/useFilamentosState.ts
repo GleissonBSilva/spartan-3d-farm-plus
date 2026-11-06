@@ -75,7 +75,7 @@ export function useFilamentosState(currentPlan: Plan) {
       const { error: eventError } = await supabase.from('spartan_inventory_events').insert({ company_id: user.companyId, filament_id: data.id, event_type: 'purchase', quantity_g: fil.pesoRestanteG, note: 'Entrada inicial do carretel' });
       if (eventError) toast.warning(`Carretel salvo, mas o histórico não foi registrado: ${eventError.message}`);
       setFilamentos(prev => [fromRow(data as FilamentRow), ...prev]);
-      if (!eventError) setMovimentacoes(prev => [{ id: crypto.randomUUID(), filamentoId: data.id, tipo: 'purchase', quantidadeGramas: fil.pesoRestanteG, data: new Date().toISOString(), motivo: 'Entrada inicial do carretel' }, ...prev].slice(0, 12));
+      if (!eventError) setMovimentacoes(prev => [{ id: crypto.randomUUID(), filamentoId: data.id, tipo: 'purchase' as const, quantidadeGramas: fil.pesoRestanteG, data: new Date().toISOString(), motivo: 'Entrada inicial do carretel' }, ...prev].slice(0, 12));
       toast.success(`Carretel ${fil.tipo} (${fil.cor}) salvo no Supabase.`);
       return true;
     } catch (error) {
@@ -100,7 +100,7 @@ export function useFilamentosState(currentPlan: Plan) {
         const note = `Ajuste manual: ${difference > 0 ? 'entrada' : 'redução'} de peso`;
         const { error: eventError } = await supabase.from('spartan_inventory_events').insert({ company_id: user.companyId, filament_id: id, event_type: 'adjustment', quantity_g: Math.abs(difference), note });
         if (eventError) toast.warning(`Estoque atualizado, mas o histórico não foi registrado: ${eventError.message}`);
-        else setMovimentacoes(prev => [{ id: crypto.randomUUID(), filamentoId: id, tipo: 'adjustment', quantidadeGramas: Math.abs(difference), data: new Date().toISOString(), motivo: note }, ...prev].slice(0, 12));
+        else setMovimentacoes(prev => [{ id: crypto.randomUUID(), filamentoId: id, tipo: 'adjustment' as const, quantidadeGramas: Math.abs(difference), data: new Date().toISOString(), motivo: note }, ...prev].slice(0, 12));
       }
       setFilamentos(prev => prev.map(item => item.id === id ? fromRow(data as FilamentRow) : item));
       toast.success('Carretel atualizado no Supabase.');
@@ -113,7 +113,7 @@ export function useFilamentosState(currentPlan: Plan) {
 
   const applyStockChange = useCallback(async (materials: ProjectMaterial[], direction: 'consume' | 'return') => {
     if (!materials?.length || !supabase) return;
-    const rows = materials.filter(material => material.materialId).map(material => ({ filament_id: material.materialId, quantity_g: Math.max(0, Math.round(material.weightGrams || 0)) }));
+    const rows = materials.filter(material => material.materialId).map(material => ({ filament_id: material.materialId, quantity_g: Math.max(0, Math.round(Number(material.weightGrams) || 0)) }));
     if (!rows.length) return;
     const { error } = await supabase.rpc(direction === 'consume' ? 'spartan_consume_filaments' : 'spartan_return_filaments', { p_materials: rows });
     if (error) { toast.error(`Falha na movimentação de estoque: ${error.message}`); throw error; }

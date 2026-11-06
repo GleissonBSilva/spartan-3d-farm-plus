@@ -11,6 +11,11 @@ export interface AiDiagnosticResult {
   source: 'supabase_edge' | 'direct_llm' | 'spartan_expert_engine';
 }
 
+export interface ChatHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 const CUSTOM_AI_KEY_STORAGE_PREFIX = 'spartan_custom_ai_key_';
 const CUSTOM_AI_PROVIDER_STORAGE_PREFIX = 'spartan_custom_ai_provider_';
 
