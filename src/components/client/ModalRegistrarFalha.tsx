@@ -36,6 +36,13 @@ interface ModalRegistrarFalhaProps {
 
 export const MOTIVOS_FALHA = [
   { 
+    id: 'cancelamento_operador', 
+    label: 'Cancelamento no Meio da Impressão', 
+    icon: '⏹️', 
+    desc: 'Impressão interrompida antes do fim: o filamento impresso até aqui é contabilizado como desperdício.',
+    tarefaManutencao: 'Limpeza de mesa e inspeção'
+  },
+  { 
     id: 'bico_entupido', 
     label: 'Bico Entupido / Falha de Extrusão', 
     icon: '🔴', 
@@ -621,3 +628,4 @@ export const ModalRegistrarFalha: React.FC<ModalRegistrarFalhaProps> = ({
     </div>
   );
 };
+

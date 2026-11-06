@@ -1499,10 +1499,10 @@ export const ParqueImpressoras: React.FC = () => {
                   variant="outline"
                   onClick={() => setFailureModalPrinter(printer)}
                   className="border-rose-500/50 bg-rose-950/30 text-xs text-rose-300 hover:bg-rose-900/50 hover:text-white font-semibold"
-                  title="Interromper por bico entupido, peça descolou ou erro e contabilizar a perda"
+                  title="Interromper ou cancelar no meio da impressão e contabilizar o desperdício proporcional"
                 >
                   <AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-rose-400" />
-                  Falha / Bico Entupido
+                  Cancelar / Registrar Perda
                 </Button>
               </>
             )}
@@ -1528,10 +1528,10 @@ export const ParqueImpressoras: React.FC = () => {
                   variant="outline"
                   onClick={() => setFailureModalPrinter(printer)}
                   className="border-rose-500/50 bg-rose-950/30 text-xs text-rose-300 hover:bg-rose-900/50 hover:text-white font-semibold"
-                  title="Interromper por bico entupido, peça descolou ou erro e contabilizar a perda"
+                  title="Interromper ou cancelar no meio da impressão e contabilizar o desperdício proporcional"
                 >
                   <AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-rose-400" />
-                  Falha / Bico Entupido
+                  Cancelar / Registrar Perda
                 </Button>
               </>
             )}

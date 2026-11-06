@@ -39,7 +39,16 @@ export interface SaaSDataContextType {
   recordMaintenance: (id: string, tasks: string[], note: string) => Promise<boolean>;
   historicoImpressoras: EventoImpressora[];
   addProjeto: (proj: Omit<ProjetoImpressao3D, 'id' | 'dataCriacao' | 'estoqueBaixado'>) => boolean;
-  updateProjetoStatus: (id: string, newStatus: ProjetoImpressao3D['status'], overridePrinterId?: string) => Promise<boolean> | void;
+  updateProjetoStatus: (
+    id: string,
+    newStatus: ProjetoImpressao3D['status'],
+    overridePrinterId?: string,
+    cancelOptions?: {
+      explicitProgress?: number;
+      explicitLostGrams?: number;
+      reason?: string;
+    }
+  ) => Promise<boolean> | void;
   updateProjeto: (id: string, changes: Partial<ProjetoImpressao3D>) => Promise<boolean>;
   deleteProjeto: (id: string) => Promise<boolean>;
   refreshFarmData: () => Promise<void>;

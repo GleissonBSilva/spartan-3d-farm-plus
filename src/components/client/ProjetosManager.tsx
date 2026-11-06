@@ -227,9 +227,9 @@ const ProjectCard: React.FC<{
                 variant="outline"
                 onClick={() => onReportFailure(project)}
                 className="border-rose-500/40 bg-rose-950/20 text-rose-300 hover:bg-rose-900/40 text-[11px] h-7 px-2 rounded-lg font-semibold shrink-0"
-                title="Registrar falha (bico entupido, peça soltou) e contabilizar perda"
+                title="Cancelar no meio da impressão e contabilizar o desperdício proporcional à porcentagem atingida"
               >
-                <AlertTriangle className="h-3 w-3 text-rose-400 mr-1" />Falha
+                <AlertTriangle className="h-3 w-3 text-rose-400 mr-1" />Cancelar com Perda
               </Button>
             )}
           </div>

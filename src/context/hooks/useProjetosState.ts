@@ -159,12 +159,19 @@ export function useProjetosState({ currentPlan, impressoras, refreshFilamentos, 
   const updateProjetoStatus = async (
     id: string,
     newStatus: ProjetoImpressao3D['status'],
-    overridePrinterId?: string
+    overridePrinterId?: string,
+    cancelOptions?: {
+      explicitProgress?: number;
+      explicitLostGrams?: number;
+      reason?: string;
+    }
   ): Promise<boolean> => {
     const project = projetos.find(item => item.id === id);
     if (!project || !supabase) return false;
     const effectivePrinterId = overridePrinterId || project.impressoraId;
     const startsProduction = newStatus === 'em_impressao' && !project.estoqueBaixado;
+    const wasInProduction = project.status === 'em_impressao' || project.estoqueBaixado;
+
     if (startsProduction) {
       if (!effectivePrinterId) {
         toast.error('Selecione uma impressora antes de iniciar a produção.');
@@ -179,6 +186,122 @@ export function useProjetosState({ currentPlan, impressoras, refreshFilamentos, 
     try {
       const { error } = await supabase.rpc('spartan_set_project_status', { p_project_id: id, p_status: newStatus });
       if (error) throw error;
+
+      // TRATAMENTO RIGOROSO DE CANCELAMENTO NO MEIO DA IMPRESSÃO (CONTABILIZAÇÃO DE DESPERDÍCIO)
+      if (newStatus === 'cancelado' && wasInProduction && user?.companyId) {
+        const linkedPrinter = impressoras.find(item => item.id === project.impressoraId || item.projetoAtualId === id);
+        const progressPercent = cancelOptions?.explicitProgress !== undefined
+          ? cancelOptions.explicitProgress
+          : (linkedPrinter?.progressoPercentual || 0);
+
+        if (progressPercent > 0) {
+          const totalWeight = Number(project.pesoEstimadoG) || 50;
+          const lostGrams = cancelOptions?.explicitLostGrams !== undefined
+            ? Math.max(1, cancelOptions.explicitLostGrams)
+            : Math.max(1, Math.round(totalWeight * (progressPercent / 100)));
+          const costUnit = (project.custoMaterial > 0 && totalWeight > 0)
+            ? (project.custoMaterial / totalWeight)
+            : 0.12;
+          const financialLoss = Number((lostGrams * costUnit).toFixed(2));
+          const reasonLabel = cancelOptions?.reason || `Cancelamento aos ${progressPercent}% de impressão`;
+
+          // 1. Deduz o filamento perdido do carretel (pois a RPC estornou 100% por padrão)
+          if (project.materials && project.materials.length > 0) {
+            for (const mat of project.materials) {
+              if (!mat.materialId) continue;
+              const matTotal = Number(mat.weightGrams) || 0;
+              const matLost = cancelOptions?.explicitLostGrams !== undefined
+                ? Math.max(1, Math.round(cancelOptions.explicitLostGrams * (matTotal / (totalWeight || 1))))
+                : Math.max(1, Math.round(matTotal * (progressPercent / 100)));
+
+              const { data: spoolData } = await supabase.from('spartan_filaments')
+                .select('remaining_weight_g')
+                .eq('id', mat.materialId)
+                .maybeSingle();
+
+              if (spoolData) {
+                const newRemaining = Math.max(0, spoolData.remaining_weight_g - matLost);
+                await supabase.from('spartan_filaments')
+                  .update({ remaining_weight_g: newRemaining, updated_at: new Date().toISOString() })
+                  .eq('id', mat.materialId);
+
+                await supabase.from('spartan_inventory_events').insert({
+                  company_id: user.companyId,
+                  user_id: user.id,
+                  filament_id: mat.materialId,
+                  project_id: id,
+                  event_type: 'adjustment',
+                  quantity_g: matLost,
+                  note: `Desperdício por Cancelamento aos ${progressPercent}%: ${matLost}g perdidas na peça "${project.nomePeca}"`,
+                  created_by: user.id,
+                });
+              }
+            }
+          } else {
+            // Busca carretel padrão do usuário para deduzir o desperdício
+            const { data: fallbackSpool } = await supabase.from('spartan_filaments')
+              .select('id, remaining_weight_g')
+              .eq('company_id', user.companyId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (fallbackSpool) {
+              const newRemaining = Math.max(0, fallbackSpool.remaining_weight_g - lostGrams);
+              await supabase.from('spartan_filaments')
+                .update({ remaining_weight_g: newRemaining, updated_at: new Date().toISOString() })
+                .eq('id', fallbackSpool.id);
+
+              await supabase.from('spartan_inventory_events').insert({
+                company_id: user.companyId,
+                user_id: user.id,
+                filament_id: fallbackSpool.id,
+                project_id: id,
+                event_type: 'adjustment',
+                quantity_g: lostGrams,
+                note: `Desperdício por Cancelamento aos ${progressPercent}%: ${lostGrams}g perdidas na peça "${project.nomePeca}"`,
+                created_by: user.id,
+              });
+            }
+          }
+
+          // 2. Atualiza o projeto com a perda real para os relatórios financeiros e de perdas
+          const auditNote = `[CANCELADO NO MEIO DA IMPRESSÃO AOS ${progressPercent}% · Desperdício real: ${lostGrams}g (R$ ${financialLoss.toFixed(2)})] ${project.observacoes || ''}`;
+          await supabase.from('spartan_projects').update({
+            estimated_weight_g: lostGrams,
+            material_cost: financialLoss,
+            total_cost: financialLoss,
+            notes: auditNote,
+            stock_deducted: true,
+            updated_at: new Date().toISOString(),
+          }).eq('id', id);
+
+          // 3. Registra evento no histórico da impressora
+          if (linkedPrinter) {
+            await supabase.from('spartan_printer_events').insert({
+              company_id: user.companyId,
+              user_id: user.id,
+              printer_id: linkedPrinter.id,
+              event_type: 'print_failure',
+              payload: {
+                motivo: reasonLabel,
+                progresso: progressPercent,
+                gramas_perdidas: lostGrams,
+                custo_prejuizo: financialLoss,
+                projeto_nome: project.nomePeca,
+                data: new Date().toISOString(),
+              }
+            });
+          }
+
+          toast.warning(
+            `⚠️ Impressão cancelada aos ${progressPercent}%! ${lostGrams}g (R$ ${financialLoss.toFixed(2)}) contabilizadas como desperdício e deduzidas do estoque.`
+          );
+        } else {
+          toast.info('Projeto cancelado antes do início da extrusão (0%). Todo o estoque foi estornado.');
+        }
+      }
+
       await Promise.all([refreshFilamentos(), refreshImpressoras()]);
       setProjetos(prev =>
         prev.map(item =>
@@ -192,11 +315,12 @@ export function useProjetosState({ currentPlan, impressoras, refreshFilamentos, 
             : item
         )
       );
+
       if (newStatus === 'concluido') {
         toast.success(`Projeto "${project.nomePeca}" marcado como concluído! Impressora liberada.`);
       } else if (newStatus === 'em_impressao') {
         toast.success(`Produção de "${project.nomePeca}" iniciada com sucesso!`);
-      } else {
+      } else if (newStatus !== 'cancelado') {
         toast.success('Status do projeto atualizado.');
       }
       return true;
